@@ -32,6 +32,7 @@ export default function Nav() {
           <Link href="/profile">My Profile</Link>
           <Link href="/upload">Upload Report</Link>
           <Link href="/reports">My Reports</Link>
+          <Link href="/trends">Health Trends</Link>
           <span className="text-sm text-gray-500 ml-auto">{user.email}</span>
           <button onClick={handleLogout} className="bg-black text-white px-3 py-1 rounded">
             Log Out
