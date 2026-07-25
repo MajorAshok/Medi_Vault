@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/Supabase'
+import QRCode from 'react-qr-code'
 
 export default function Profile() {
   const [loading, setLoading] = useState(true)
@@ -9,6 +10,7 @@ export default function Profile() {
   const [fullName, setFullName] = useState('')
   const [bloodType, setBloodType] = useState('')
   const [emergencyContact, setEmergencyContact] = useState('')
+  const [userId, setUserId] = useState('')
 
   useEffect(() => {
     loadProfile()
@@ -22,6 +24,8 @@ export default function Profile() {
       setLoading(false)
       return
     }
+
+    setUserId(user.id)
 
     const { data, error } = await supabase
       .from('profiles')
@@ -97,6 +101,15 @@ export default function Profile() {
         Save Profile
       </button>
       {message && <p className="mt-4">{message}</p>}
+      {userId && (
+  <div className="mt-8 text-center">
+    <h2 className="text-lg font-semibold mb-2">Your Emergency QR Code</h2>
+    <div className="inline-block p-4 bg-white">
+      <QRCode value={`${window.location.origin}/sos/${userId}`} size={160} />
+    </div>
+    <p className="text-xs text-gray-500 mt-2">Scan to view emergency info</p>
+  </div>
+)}
     </main>
   )
 }
