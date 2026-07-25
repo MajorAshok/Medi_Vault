@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/Supabase'
+import { supabase } from '../../lib/Supabase'
 import type { User } from '@supabase/supabase-js'
 
 export default function Nav() {
@@ -30,6 +30,8 @@ export default function Nav() {
       {user ? (
         <>
           <Link href="/profile">My Profile</Link>
+          <Link href="/upload">Upload Report</Link>
+          <Link href="/reports">My Reports</Link>
           <span className="text-sm text-gray-500 ml-auto">{user.email}</span>
           <button onClick={handleLogout} className="bg-black text-white px-3 py-1 rounded">
             Log Out
