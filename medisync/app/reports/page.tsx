@@ -26,6 +26,19 @@ type Answer = {
     source_text?: string
 }
 
+type ProfileSuggestion = {
+    value: string
+    confidence: 'high' | 'medium' | 'low'
+    source_text: string
+}
+
+type ProfileSuggestions = {
+    blood_type?: ProfileSuggestion
+    allergies?: ProfileSuggestion
+    current_medications?: ProfileSuggestion
+    medical_conditions?: ProfileSuggestion
+}
+
 export default function Reports() {
     const [reports, setReports] = useState<Report[]>([])
     const [loading, setLoading] = useState(true)
@@ -40,6 +53,10 @@ export default function Reports() {
     const [searchQuery, setSearchQuery] = useState('')
     const [explanations, setExplanations] = useState<Record<string, string>>({})
     const [explainingId, setExplainingId] = useState<string | null>(null)
+
+    const [profileSuggestions, setProfileSuggestions] = useState<Record<string, ProfileSuggestions>>({})
+    const [suggestingId, setSuggestingId] = useState<string | null>(null)
+    const [savingProfileId, setSavingProfileId] = useState<string | null>(null)
 
     useEffect(() => {
         loadReports()
@@ -196,6 +213,86 @@ export default function Reports() {
         )
     })
 
+    async function handleSuggestProfileInfo(reportId: string) {
+        setSuggestingId(reportId)
+        const res = await fetch('/api/extract-profile-info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reportId }),
+        })
+        const data = await res.json()
+        if (res.ok) {
+            setProfileSuggestions((prev) => ({ ...prev, [reportId]: data }))
+        } else {
+            alert(`Error: ${data.error}`)
+        }
+        setSuggestingId(null)
+    }
+
+    function updateSuggestion(reportId: string, field: keyof ProfileSuggestions, value: string) {
+        setProfileSuggestions((prev) => ({
+            ...prev,
+            [reportId]: {
+                ...prev[reportId],
+                [field]: { ...prev[reportId]?.[field], value },
+            },
+        }))
+    }
+
+    async function handleSaveProfileSuggestions(reportId: string) {
+        const suggestions = profileSuggestions[reportId]
+        if (!suggestions) return
+
+        setSavingProfileId(reportId)
+
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+            alert('You must be logged in.')
+            setSavingProfileId(null)
+            return
+        }
+
+        // Fetch current profile so we only overwrite fields the user actually filled/confirmed
+        const { data: currentProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single()
+
+        const updates: Record<string, string> = {}
+        if (suggestions.blood_type?.value) updates.blood_type = suggestions.blood_type.value
+        if (suggestions.allergies?.value) {
+            updates.allergies = currentProfile?.allergies
+                ? `${currentProfile.allergies}, ${suggestions.allergies.value}`
+                : suggestions.allergies.value
+        }
+        if (suggestions.current_medications?.value) {
+            updates.current_medications = currentProfile?.current_medications
+                ? `${currentProfile.current_medications}, ${suggestions.current_medications.value}`
+                : suggestions.current_medications.value
+        }
+        if (suggestions.medical_conditions?.value) {
+            updates.medical_conditions = currentProfile?.medical_conditions
+                ? `${currentProfile.medical_conditions}, ${suggestions.medical_conditions.value}`
+                : suggestions.medical_conditions.value
+        }
+
+        const { error } = await supabase.from('profiles').update(updates).eq('id', user.id)
+
+        if (error) {
+            alert(`Error saving: ${error.message}`)
+        } else {
+            alert('✅ Profile updated!')
+            setProfileSuggestions((prev) => {
+                const updated = { ...prev }
+                delete updated[reportId]
+                return updated
+            })
+        }
+
+        setSavingProfileId(null)
+    }
+
     return (
         <main className="p-10 max-w-2xl mx-auto">
             <h1 className="text-2xl font-bold mb-6">My Reports</h1>
@@ -240,6 +337,13 @@ export default function Reports() {
                                     className="bg-green-700 text-white px-3 py-1 rounded text-sm disabled:opacity-50"
                                 >
                                     {extractingId === report.id ? 'Extracting...' : 'Extract Health Readings'}
+                                </button>
+                                <button
+                                    onClick={() => handleSuggestProfileInfo(report.id)}
+                                    disabled={suggestingId === report.id}
+                                    className="bg-purple-700 text-white px-3 py-1 rounded text-sm disabled:opacity-50"
+                                >
+                                    {suggestingId === report.id ? 'Analyzing...' : 'Suggest Profile Info'}
                                 </button>
                             </div>
                         </div>
@@ -360,6 +464,7 @@ export default function Reports() {
                                                 </p>
                                             )}
                                         </div>
+
                                     ))}
                                 </div>
 
@@ -372,6 +477,57 @@ export default function Reports() {
                                         {savingId === report.id ? 'Saving...' : 'Save to My Health Data'}
                                     </button>
                                 )}
+                            </div>
+                        )}
+
+                        {profileSuggestions[report.id] && (
+                            <div className="mt-4 border-t pt-3">
+                                <p className="font-semibold text-sm mb-2">Review suggested profile info:</p>
+                                <div className="flex flex-col gap-3">
+                                    {(['blood_type', 'allergies', 'current_medications', 'medical_conditions'] as const).map(
+                                        (field) => {
+                                            const suggestion = profileSuggestions[report.id][field]
+                                            if (!suggestion || !suggestion.value) return null
+                                            return (
+                                                <div key={field} className="text-sm">
+                                                    <div className="flex gap-2 items-center flex-wrap">
+                                                        <label className="w-40 capitalize text-gray-600">
+                                                            {field.replace(/_/g, ' ')}:
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            value={suggestion.value}
+                                                            onChange={(e) => updateSuggestion(report.id, field, e.target.value)}
+                                                            className="border p-1 rounded flex-1 min-w-[150px]"
+                                                        />
+                                                        <span
+                                                            className={`text-xs px-2 py-1 rounded-full font-medium ${suggestion.confidence === 'high'
+                                                                    ? 'bg-green-100 text-green-800'
+                                                                    : suggestion.confidence === 'medium'
+                                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                                        : 'bg-red-100 text-red-800'
+                                                                }`}
+                                                        >
+                                                            {suggestion.confidence}
+                                                        </span>
+                                                    </div>
+                                                    {suggestion.source_text && (
+                                                        <p className="text-xs text-gray-500 italic pl-1">
+                                                            Found: "{suggestion.source_text}"
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )
+                                        }
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => handleSaveProfileSuggestions(report.id)}
+                                    disabled={savingProfileId === report.id}
+                                    className="mt-3 bg-purple-700 text-white px-3 py-1 rounded text-sm disabled:opacity-50"
+                                >
+                                    {savingProfileId === report.id ? 'Saving...' : 'Add to My Profile'}
+                                </button>
                             </div>
                         )}
                     </div>
