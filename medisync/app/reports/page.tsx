@@ -16,6 +16,14 @@ type Reading = {
     value: number
     unit: string
     reading_date: string | null
+    confidence?: 'high' | 'medium' | 'low'
+    source_text?: string
+}
+
+type Answer = {
+    answer: string
+    reasoning?: string
+    source_text?: string
 }
 
 export default function Reports() {
@@ -23,13 +31,15 @@ export default function Reports() {
     const [loading, setLoading] = useState(true)
     const [processingId, setProcessingId] = useState<string | null>(null)
     const [questions, setQuestions] = useState<Record<string, string>>({})
-    const [answers, setAnswers] = useState<Record<string, string>>({})
-    const [askingId, setAskingId] = useState<string | null>(null)
 
+    const [askingId, setAskingId] = useState<string | null>(null)
+    const [answers, setAnswers] = useState<Record<string, Answer>>({})
     const [extractingId, setExtractingId] = useState<string | null>(null)
     const [draftReadings, setDraftReadings] = useState<Record<string, Reading[]>>({})
     const [savingId, setSavingId] = useState<string | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
+    const [explanations, setExplanations] = useState<Record<string, string>>({})
+    const [explainingId, setExplainingId] = useState<string | null>(null)
 
     useEffect(() => {
         loadReports()
@@ -72,11 +82,35 @@ export default function Reports() {
         })
         const data = await res.json()
         if (res.ok) {
-            setAnswers((prev) => ({ ...prev, [reportId]: data.answer }))
+            setAnswers((prev) => ({ ...prev, [reportId]: data }))
         } else {
             alert(`Error: ${data.error}`)
         }
         setAskingId(null)
+    }
+
+    async function handleExplain(reportId: string) {
+        const question = questions[reportId]
+        const answerObj = answers[reportId]
+        if (!question || !answerObj) return
+
+        setExplainingId(reportId)
+
+        const res = await fetch('/api/explain-answer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reportId, question, answer: answerObj.answer }),
+        })
+
+        const data = await res.json()
+
+        if (res.ok) {
+            setExplanations((prev) => ({ ...prev, [reportId]: data.explanation }))
+        } else {
+            alert(`Error: ${data.error}`)
+        }
+
+        setExplainingId(null)
     }
 
     async function handleExtract(reportId: string) {
@@ -236,8 +270,30 @@ export default function Reports() {
                         </div>
 
                         {answers[report.id] && (
-                            <div className="mt-2 p-3 bg-blue-50 rounded text-sm whitespace-pre-wrap">
-                                {answers[report.id]}
+                            <div className="mt-2 p-3 bg-blue-50 rounded text-sm">
+                                <p className="whitespace-pre-wrap">{answers[report.id].answer}</p>
+                                {answers[report.id].reasoning && (
+                                    <p className="mt-2 text-xs text-gray-600 italic">
+                                        {answers[report.id].reasoning}
+                                    </p>
+                                )}
+                                {answers[report.id].source_text && (
+                                    <p className="mt-1 text-xs text-gray-500 italic">
+                                        {answers[report.id].source_text}
+                                    </p>
+                                )}
+                                <button
+                                    onClick={() => handleExplain(report.id)}
+                                    disabled={explainingId === report.id}
+                                    className="mt-2 text-xs text-blue-700 underline disabled:opacity-50"
+                                >
+                                    {explainingId === report.id ? 'Explaining...' : 'Explain this answer'}
+                                </button>
+                                {explanations[report.id] && (
+                                    <p className="mt-2 text-xs text-gray-700 border-t pt-2 whitespace-pre-wrap">
+                                        {explanations[report.id]}
+                                    </p>
+                                )}
                             </div>
                         )}
 
@@ -253,48 +309,56 @@ export default function Reports() {
 
                                 <div className="flex flex-col gap-2">
                                     {draftReadings[report.id].map((reading, index) => (
-                                        <div key={index} className="flex gap-2 items-center text-sm">
-                                            <input
-                                                type="text"
-                                                value={reading.reading_type}
-                                                onChange={(e) =>
-                                                    updateDraftReading(report.id, index, 'reading_type', e.target.value)
-                                                }
-                                                className="border p-1 rounded w-40"
-                                                placeholder="type"
-                                            />
-                                            <input
-                                                type="number"
-                                                value={reading.value}
-                                                onChange={(e) =>
-                                                    updateDraftReading(report.id, index, 'value', e.target.value)
-                                                }
-                                                className="border p-1 rounded w-24"
-                                                placeholder="value"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={reading.unit}
-                                                onChange={(e) =>
-                                                    updateDraftReading(report.id, index, 'unit', e.target.value)
-                                                }
-                                                className="border p-1 rounded w-20"
-                                                placeholder="unit"
-                                            />
-                                            <input
-                                                type="date"
-                                                value={reading.reading_date || ''}
-                                                onChange={(e) =>
-                                                    updateDraftReading(report.id, index, 'reading_date', e.target.value)
-                                                }
-                                                className="border p-1 rounded"
-                                            />
-                                            <button
-                                                onClick={() => removeDraftReading(report.id, index)}
-                                                className="text-red-600 text-xs"
-                                            >
-                                                Remove
-                                            </button>
+                                        <div key={index} className="flex flex-col gap-1 border-b pb-2 mb-1">
+                                            <div className="flex gap-2 items-center text-sm flex-wrap">
+                                                <input
+                                                    type="text"
+                                                    value={reading.reading_type}
+                                                    onChange={(e) => updateDraftReading(report.id, index, 'reading_type', e.target.value)}
+                                                    className="border p-1 rounded w-40"
+                                                    placeholder="type"
+                                                />
+                                                <input
+                                                    type="number"
+                                                    value={reading.value}
+                                                    onChange={(e) => updateDraftReading(report.id, index, 'value', e.target.value)}
+                                                    className="border p-1 rounded w-24"
+                                                    placeholder="value"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={reading.unit}
+                                                    onChange={(e) => updateDraftReading(report.id, index, 'unit', e.target.value)}
+                                                    className="border p-1 rounded w-20"
+                                                    placeholder="unit"
+                                                />
+                                                <input
+                                                    type="date"
+                                                    value={reading.reading_date || ''}
+                                                    onChange={(e) => updateDraftReading(report.id, index, 'reading_date', e.target.value)}
+                                                    className="border p-1 rounded"
+                                                />
+                                                {reading.confidence && (
+                                                    <span
+                                                        className={`text-xs px-2 py-1 rounded-full font-medium ${reading.confidence === 'high'
+                                                            ? 'bg-green-100 text-green-800'
+                                                            : reading.confidence === 'medium'
+                                                                ? 'bg-yellow-100 text-yellow-800'
+                                                                : 'bg-red-100 text-red-800'
+                                                            }`}
+                                                    >
+                                                        {reading.confidence} confidence
+                                                    </span>
+                                                )}
+                                                <button onClick={() => removeDraftReading(report.id, index)} className="text-red-600 text-xs">
+                                                    Remove
+                                                </button>
+                                            </div>
+                                            {reading.source_text && (
+                                                <p className="text-xs text-gray-500 italic pl-1">
+                                                    Found in report: "{reading.source_text}"
+                                                </p>
+                                            )}
                                         </div>
                                     ))}
                                 </div>

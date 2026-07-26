@@ -47,11 +47,15 @@ export async function POST(request: Request) {
 Respond ONLY with valid JSON in exactly this format, no other text:
 {
   "readings": [
-    { "reading_type": "blood_sugar", "value": 110, "unit": "mg/dL", "reading_date": "2026-06-01" }
+    { "reading_type": "blood_sugar", "value": 110, "unit": "mg/dL", "reading_date": "2026-06-01", "confidence": "high", "source_text": "Fasting Blood Sugar: 110 mg/dL" }
   ]
 }
 
-Use snake_case for reading_type. If no date is found in the report, use null for reading_date. If you find nothing extractable, return { "readings": [] }.`,
+For each reading, include:
+- "confidence": one of "high", "medium", or "low" — "high" if clearly printed/typed and unambiguous, "medium" if it required interpretation, "low" if handwritten, unclear, or uncertain.
+- "source_text": the exact short snippet from the report where you found this value.
+
+Use snake_case for reading_type. If no date is found, use null for reading_date. If nothing is extractable, return { "readings": [] }.`,
           },
         ],
       },
