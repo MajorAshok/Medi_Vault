@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/Supabase'
 import { Button } from '@/components/ui/button'
 import QRCode from 'react-qr-code'
@@ -24,8 +24,9 @@ export default function Profile() {
   const [primaryEmergencyContact, setPrimaryEmergencyContact] = useState('')
   const [secondaryEmergencyContact, setSecondaryEmergencyContact] = useState('')
   const [avatarPath, setAvatarPath] = useState('')
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     loadProfile()
@@ -80,21 +81,19 @@ export default function Profile() {
     return age
   }
 
-  async function handleAvatarUpload() {
-    if (!avatarFile) return
+  async function handleAvatarUpload(file: File) {
     setUploadingAvatar(true)
-
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setUploadingAvatar(false)
       return
     }
 
-    const filePath = `${user.id}/${Date.now()}_${avatarFile.name}`
+    const filePath = `${user.id}/${Date.now()}_${file.name}`
 
     const { error: uploadError } = await supabase.storage
       .from('avatars')
-      .upload(filePath, avatarFile)
+      .upload(filePath, file)
 
     if (uploadError) {
       setMessage(`Error uploading photo: ${uploadError.message}`)
@@ -102,8 +101,18 @@ export default function Profile() {
       return
     }
 
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ avatar_path: filePath })
+      .eq('id', user.id)
+
+    if (updateError) {
+      setMessage(`Photo uploaded but failed to save: ${updateError.message}`)
+    } else {
+      setMessage('Profile photo updated.')
+    }
+
     setAvatarPath(filePath)
-    setMessage('Photo uploaded — click Save Profile to confirm.')
     setUploadingAvatar(false)
   }
 
@@ -164,6 +173,20 @@ export default function Profile() {
 
   return (
     <main className="relative min-h-screen overflow-hidden">
+      <style>{`
+        @keyframes ring-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .avatar-ring {
+          background: conic-gradient(
+            from 0deg,
+            #10b981, #06b6d4, #8b5cf6, #ec4899, #f59e0b, #10b981
+          );
+          animation: ring-spin 4s linear infinite;
+        }
+      `}</style>
+
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-40 left-0 h-[30rem] w-[30rem] rounded-full bg-emerald-500/15 blur-[100px]" />
         <div className="absolute top-0 right-0 h-[26rem] w-[26rem] rounded-full bg-fuchsia-500/10 blur-[100px]" />
@@ -179,38 +202,53 @@ export default function Profile() {
         <section className="relative rounded-3xl border border-white/10 bg-card/40 backdrop-blur-xl p-8 mb-6 overflow-hidden">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-fuchsia-500/10" />
           <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-6">
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt="Profile"
-                className="h-36 w-36 sm:h-40 sm:w-40 rounded-full object-cover ring-4 ring-white/10 shrink-0"
-              />
-            ) : (
-              <div className="h-36 w-36 sm:h-40 sm:w-40 rounded-full bg-muted flex items-center justify-center text-muted-foreground text-sm shrink-0">
-                No photo
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) handleAvatarUpload(file)
+              }}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              className="relative shrink-0 group h-[9.5rem] w-[9.5rem] sm:h-[10.5rem] sm:w-[10.5rem] rounded-full"
+            >
+              {/* rotating ring layer — behind everything, only this spins */}
+              <div className="absolute inset-0 rounded-full avatar-ring" />
+
+              {/* static photo layer — sits on top, does not rotate */}
+              <div className="absolute inset-[3px] rounded-full bg-background p-1">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt="Profile"
+                    className="h-full w-full rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="h-full w-full rounded-full bg-muted flex items-center justify-center text-muted-foreground text-sm">
+                    No photo
+                  </div>
+                )}
               </div>
-            )}
+
+              <div className="absolute inset-[3px] rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs">
+                {uploadingAvatar ? 'Uploading...' : 'Change'}
+              </div>
+            </button>
+
             <div className="flex-1 text-center sm:text-left">
               <h2 className="font-heading text-xl font-semibold text-foreground">
                 {fullName || 'Your Name'}
               </h2>
               <p className="text-sm text-muted-foreground mt-1">{email}</p>
-              <div className="mt-4 flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(e) => setAvatarFile(e.target.files?.[0] || null)}
-                  className="text-xs text-muted-foreground file:mr-2 file:rounded-md file:border-0 file:bg-secondary file:px-2.5 file:py-1.5 file:text-xs file:text-secondary-foreground"
-                />
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={handleAvatarUpload}
-                  disabled={!avatarFile || uploadingAvatar}
-                >
-                  {uploadingAvatar ? 'Uploading...' : 'Upload Photo'}
-                </Button>
-              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Tap your photo to change it
+              </p>
             </div>
           </div>
         </section>
@@ -294,7 +332,6 @@ export default function Profile() {
               </div>
             </section>
 
-            {/* QR code card — from sos-feature */}
             {userId && (
               <section className="rounded-2xl border border-border bg-card p-6 flex flex-col sm:flex-row items-center gap-6">
                 <div className="p-3 bg-white rounded-xl shrink-0">

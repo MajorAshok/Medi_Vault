@@ -1,14 +1,26 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { Geist, Geist_Mono, JetBrains_Mono, Baloo_2, Monoton, Abril_Fatface } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import Sidebar from "./components/Sidebar";
 
 const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono' });
 
-const spaceGrotesk = Space_Grotesk({
+const baloo2 = Baloo_2({
   subsets: ['latin'],
   variable: '--font-heading',
+});
+
+const abrilFatface = Abril_Fatface({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-tagline',
+});
+
+const monoton = Monoton({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-brand',
 });
 
 const geistSans = Geist({
@@ -41,7 +53,9 @@ export default function RootLayout({
         geistSans.variable,
         geistMono.variable,
         jetbrainsMono.variable,
-        spaceGrotesk.variable,
+        baloo2.variable,
+        abrilFatface.variable,
+        monoton.variable,
         "font-mono"
       )}
     >

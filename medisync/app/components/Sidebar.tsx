@@ -15,6 +15,8 @@ const navItems = [
   { href: '/sos', label: 'Medical QR Code', icon: QrCode },
 ]
 
+const publicRoutes = ['/login', '/signup', '/Signup']
+
 export default function Sidebar() {
   const [user, setUser] = useState<User | null>(null)
   const pathname = usePathname()
@@ -32,7 +34,9 @@ export default function Sidebar() {
     window.location.href = '/login'
   }
 
-  if (!user) return null
+  const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith('/sos/')
+
+  if (!user || isPublicRoute) return null
 
   return (
     <aside className="hidden md:flex flex-col w-20 lg:w-60 shrink-0 h-screen sticky top-0 p-4">
