@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/Supabase'
 import { Button } from '@/components/ui/button'
+import QRCode from 'react-qr-code'
 
 export default function Profile() {
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [email, setEmail] = useState('')
+  const [userId, setUserId] = useState('')
 
   const [fullName, setFullName] = useState('')
   const [phoneNumber, setPhoneNumber] = useState('')
@@ -39,6 +41,7 @@ export default function Profile() {
     }
 
     setEmail(user.email || '')
+    setUserId(user.id)
 
     const { data, error } = await supabase
       .from('profiles')
@@ -213,7 +216,7 @@ export default function Profile() {
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 flex flex-col gap-5">
             <section className="rounded-2xl border border-border bg-card p-6">
               <h2 className="font-heading text-sm font-semibold text-foreground mb-4">
                 Personal Information
@@ -290,6 +293,23 @@ export default function Profile() {
                 </div>
               </div>
             </section>
+
+            {/* QR code card — from sos-feature */}
+            {userId && (
+              <section className="rounded-2xl border border-border bg-card p-6 flex flex-col sm:flex-row items-center gap-6">
+                <div className="p-3 bg-white rounded-xl shrink-0">
+                  <QRCode value={`${window.location.origin}/sos/${userId}`} size={120} />
+                </div>
+                <div className="text-center sm:text-left">
+                  <h2 className="font-heading text-sm font-semibold text-foreground mb-1">
+                    Your Emergency QR Code
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Scan to view your emergency info — blood type and emergency contact only, visible without logging in.
+                  </p>
+                </div>
+              </section>
+            )}
           </div>
 
           <section className="relative rounded-2xl border border-white/10 bg-card/40 backdrop-blur-xl p-5 shadow-lg overflow-hidden self-start">
