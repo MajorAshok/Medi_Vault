@@ -16,6 +16,27 @@ type Reading = {
     value: number
     unit: string
     reading_date: string | null
+    confidence?: 'high' | 'medium' | 'low'
+    source_text?: string
+}
+
+type Answer = {
+    answer: string
+    reasoning?: string
+    source_text?: string
+}
+
+type ProfileSuggestion = {
+    value: string
+    confidence: 'high' | 'medium' | 'low'
+    source_text: string
+}
+
+type ProfileSuggestions = {
+    blood_type?: ProfileSuggestion
+    allergies?: ProfileSuggestion
+    current_medications?: ProfileSuggestion
+    medical_conditions?: ProfileSuggestion
 }
 
 export default function Reports() {
@@ -23,13 +44,19 @@ export default function Reports() {
     const [loading, setLoading] = useState(true)
     const [processingId, setProcessingId] = useState<string | null>(null)
     const [questions, setQuestions] = useState<Record<string, string>>({})
-    const [answers, setAnswers] = useState<Record<string, string>>({})
-    const [askingId, setAskingId] = useState<string | null>(null)
 
+    const [askingId, setAskingId] = useState<string | null>(null)
+    const [answers, setAnswers] = useState<Record<string, Answer>>({})
     const [extractingId, setExtractingId] = useState<string | null>(null)
     const [draftReadings, setDraftReadings] = useState<Record<string, Reading[]>>({})
     const [savingId, setSavingId] = useState<string | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
+    const [explanations, setExplanations] = useState<Record<string, string>>({})
+    const [explainingId, setExplainingId] = useState<string | null>(null)
+
+    const [profileSuggestions, setProfileSuggestions] = useState<Record<string, ProfileSuggestions>>({})
+    const [suggestingId, setSuggestingId] = useState<string | null>(null)
+    const [savingProfileId, setSavingProfileId] = useState<string | null>(null)
 
     useEffect(() => {
         loadReports()
@@ -72,11 +99,35 @@ export default function Reports() {
         })
         const data = await res.json()
         if (res.ok) {
-            setAnswers((prev) => ({ ...prev, [reportId]: data.answer }))
+            setAnswers((prev) => ({ ...prev, [reportId]: data }))
         } else {
             alert(`Error: ${data.error}`)
         }
         setAskingId(null)
+    }
+
+    async function handleExplain(reportId: string) {
+        const question = questions[reportId]
+        const answerObj = answers[reportId]
+        if (!question || !answerObj) return
+
+        setExplainingId(reportId)
+
+        const res = await fetch('/api/explain-answer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reportId, question, answer: answerObj.answer }),
+        })
+
+        const data = await res.json()
+
+        if (res.ok) {
+            setExplanations((prev) => ({ ...prev, [reportId]: data.explanation }))
+        } else {
+            alert(`Error: ${data.error}`)
+        }
+
+        setExplainingId(null)
     }
 
     async function handleExtract(reportId: string) {
@@ -162,6 +213,86 @@ export default function Reports() {
         )
     })
 
+    async function handleSuggestProfileInfo(reportId: string) {
+        setSuggestingId(reportId)
+        const res = await fetch('/api/extract-profile-info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reportId }),
+        })
+        const data = await res.json()
+        if (res.ok) {
+            setProfileSuggestions((prev) => ({ ...prev, [reportId]: data }))
+        } else {
+            alert(`Error: ${data.error}`)
+        }
+        setSuggestingId(null)
+    }
+
+    function updateSuggestion(reportId: string, field: keyof ProfileSuggestions, value: string) {
+        setProfileSuggestions((prev) => ({
+            ...prev,
+            [reportId]: {
+                ...prev[reportId],
+                [field]: { ...prev[reportId]?.[field], value },
+            },
+        }))
+    }
+
+    async function handleSaveProfileSuggestions(reportId: string) {
+        const suggestions = profileSuggestions[reportId]
+        if (!suggestions) return
+
+        setSavingProfileId(reportId)
+
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+            alert('You must be logged in.')
+            setSavingProfileId(null)
+            return
+        }
+
+        // Fetch current profile so we only overwrite fields the user actually filled/confirmed
+        const { data: currentProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single()
+
+        const updates: Record<string, string> = {}
+        if (suggestions.blood_type?.value) updates.blood_type = suggestions.blood_type.value
+        if (suggestions.allergies?.value) {
+            updates.allergies = currentProfile?.allergies
+                ? `${currentProfile.allergies}, ${suggestions.allergies.value}`
+                : suggestions.allergies.value
+        }
+        if (suggestions.current_medications?.value) {
+            updates.current_medications = currentProfile?.current_medications
+                ? `${currentProfile.current_medications}, ${suggestions.current_medications.value}`
+                : suggestions.current_medications.value
+        }
+        if (suggestions.medical_conditions?.value) {
+            updates.medical_conditions = currentProfile?.medical_conditions
+                ? `${currentProfile.medical_conditions}, ${suggestions.medical_conditions.value}`
+                : suggestions.medical_conditions.value
+        }
+
+        const { error } = await supabase.from('profiles').update(updates).eq('id', user.id)
+
+        if (error) {
+            alert(`Error saving: ${error.message}`)
+        } else {
+            alert('✅ Profile updated!')
+            setProfileSuggestions((prev) => {
+                const updated = { ...prev }
+                delete updated[reportId]
+                return updated
+            })
+        }
+
+        setSavingProfileId(null)
+    }
+
     return (
         <main className="p-10 max-w-2xl mx-auto">
             <h1 className="text-2xl font-bold mb-6">My Reports</h1>
@@ -207,6 +338,13 @@ export default function Reports() {
                                 >
                                     {extractingId === report.id ? 'Extracting...' : 'Extract Health Readings'}
                                 </button>
+                                <button
+                                    onClick={() => handleSuggestProfileInfo(report.id)}
+                                    disabled={suggestingId === report.id}
+                                    className="bg-purple-700 text-white px-3 py-1 rounded text-sm disabled:opacity-50"
+                                >
+                                    {suggestingId === report.id ? 'Analyzing...' : 'Suggest Profile Info'}
+                                </button>
                             </div>
                         </div>
 
@@ -236,8 +374,30 @@ export default function Reports() {
                         </div>
 
                         {answers[report.id] && (
-                            <div className="mt-2 p-3 bg-blue-50 rounded text-sm whitespace-pre-wrap">
-                                {answers[report.id]}
+                            <div className="mt-2 p-3 bg-blue-50 rounded text-sm">
+                                <p className="whitespace-pre-wrap">{answers[report.id].answer}</p>
+                                {answers[report.id].reasoning && (
+                                    <p className="mt-2 text-xs text-gray-600 italic">
+                                        {answers[report.id].reasoning}
+                                    </p>
+                                )}
+                                {answers[report.id].source_text && (
+                                    <p className="mt-1 text-xs text-gray-500 italic">
+                                        {answers[report.id].source_text}
+                                    </p>
+                                )}
+                                <button
+                                    onClick={() => handleExplain(report.id)}
+                                    disabled={explainingId === report.id}
+                                    className="mt-2 text-xs text-blue-700 underline disabled:opacity-50"
+                                >
+                                    {explainingId === report.id ? 'Explaining...' : 'Explain this answer'}
+                                </button>
+                                {explanations[report.id] && (
+                                    <p className="mt-2 text-xs text-gray-700 border-t pt-2 whitespace-pre-wrap">
+                                        {explanations[report.id]}
+                                    </p>
+                                )}
                             </div>
                         )}
 
@@ -253,49 +413,58 @@ export default function Reports() {
 
                                 <div className="flex flex-col gap-2">
                                     {draftReadings[report.id].map((reading, index) => (
-                                        <div key={index} className="flex gap-2 items-center text-sm">
-                                            <input
-                                                type="text"
-                                                value={reading.reading_type}
-                                                onChange={(e) =>
-                                                    updateDraftReading(report.id, index, 'reading_type', e.target.value)
-                                                }
-                                                className="border p-1 rounded w-40"
-                                                placeholder="type"
-                                            />
-                                            <input
-                                                type="number"
-                                                value={reading.value}
-                                                onChange={(e) =>
-                                                    updateDraftReading(report.id, index, 'value', e.target.value)
-                                                }
-                                                className="border p-1 rounded w-24"
-                                                placeholder="value"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={reading.unit}
-                                                onChange={(e) =>
-                                                    updateDraftReading(report.id, index, 'unit', e.target.value)
-                                                }
-                                                className="border p-1 rounded w-20"
-                                                placeholder="unit"
-                                            />
-                                            <input
-                                                type="date"
-                                                value={reading.reading_date || ''}
-                                                onChange={(e) =>
-                                                    updateDraftReading(report.id, index, 'reading_date', e.target.value)
-                                                }
-                                                className="border p-1 rounded"
-                                            />
-                                            <button
-                                                onClick={() => removeDraftReading(report.id, index)}
-                                                className="text-red-600 text-xs"
-                                            >
-                                                Remove
-                                            </button>
+                                        <div key={index} className="flex flex-col gap-1 border-b pb-2 mb-1">
+                                            <div className="flex gap-2 items-center text-sm flex-wrap">
+                                                <input
+                                                    type="text"
+                                                    value={reading.reading_type}
+                                                    onChange={(e) => updateDraftReading(report.id, index, 'reading_type', e.target.value)}
+                                                    className="border p-1 rounded w-40"
+                                                    placeholder="type"
+                                                />
+                                                <input
+                                                    type="number"
+                                                    value={reading.value}
+                                                    onChange={(e) => updateDraftReading(report.id, index, 'value', e.target.value)}
+                                                    className="border p-1 rounded w-24"
+                                                    placeholder="value"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={reading.unit}
+                                                    onChange={(e) => updateDraftReading(report.id, index, 'unit', e.target.value)}
+                                                    className="border p-1 rounded w-20"
+                                                    placeholder="unit"
+                                                />
+                                                <input
+                                                    type="date"
+                                                    value={reading.reading_date || ''}
+                                                    onChange={(e) => updateDraftReading(report.id, index, 'reading_date', e.target.value)}
+                                                    className="border p-1 rounded"
+                                                />
+                                                {reading.confidence && (
+                                                    <span
+                                                        className={`text-xs px-2 py-1 rounded-full font-medium ${reading.confidence === 'high'
+                                                            ? 'bg-green-100 text-green-800'
+                                                            : reading.confidence === 'medium'
+                                                                ? 'bg-yellow-100 text-yellow-800'
+                                                                : 'bg-red-100 text-red-800'
+                                                            }`}
+                                                    >
+                                                        {reading.confidence} confidence
+                                                    </span>
+                                                )}
+                                                <button onClick={() => removeDraftReading(report.id, index)} className="text-red-600 text-xs">
+                                                    Remove
+                                                </button>
+                                            </div>
+                                            {reading.source_text && (
+                                                <p className="text-xs text-gray-500 italic pl-1">
+                                                    Found in report: "{reading.source_text}"
+                                                </p>
+                                            )}
                                         </div>
+
                                     ))}
                                 </div>
 
@@ -308,6 +477,57 @@ export default function Reports() {
                                         {savingId === report.id ? 'Saving...' : 'Save to My Health Data'}
                                     </button>
                                 )}
+                            </div>
+                        )}
+
+                        {profileSuggestions[report.id] && (
+                            <div className="mt-4 border-t pt-3">
+                                <p className="font-semibold text-sm mb-2">Review suggested profile info:</p>
+                                <div className="flex flex-col gap-3">
+                                    {(['blood_type', 'allergies', 'current_medications', 'medical_conditions'] as const).map(
+                                        (field) => {
+                                            const suggestion = profileSuggestions[report.id][field]
+                                            if (!suggestion || !suggestion.value) return null
+                                            return (
+                                                <div key={field} className="text-sm">
+                                                    <div className="flex gap-2 items-center flex-wrap">
+                                                        <label className="w-40 capitalize text-gray-600">
+                                                            {field.replace(/_/g, ' ')}:
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            value={suggestion.value}
+                                                            onChange={(e) => updateSuggestion(report.id, field, e.target.value)}
+                                                            className="border p-1 rounded flex-1 min-w-[150px]"
+                                                        />
+                                                        <span
+                                                            className={`text-xs px-2 py-1 rounded-full font-medium ${suggestion.confidence === 'high'
+                                                                    ? 'bg-green-100 text-green-800'
+                                                                    : suggestion.confidence === 'medium'
+                                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                                        : 'bg-red-100 text-red-800'
+                                                                }`}
+                                                        >
+                                                            {suggestion.confidence}
+                                                        </span>
+                                                    </div>
+                                                    {suggestion.source_text && (
+                                                        <p className="text-xs text-gray-500 italic pl-1">
+                                                            Found: "{suggestion.source_text}"
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )
+                                        }
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => handleSaveProfileSuggestions(report.id)}
+                                    disabled={savingProfileId === report.id}
+                                    className="mt-3 bg-purple-700 text-white px-3 py-1 rounded text-sm disabled:opacity-50"
+                                >
+                                    {savingProfileId === report.id ? 'Saving...' : 'Add to My Profile'}
+                                </button>
                             </div>
                         )}
                     </div>

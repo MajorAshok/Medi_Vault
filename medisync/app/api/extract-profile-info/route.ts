@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
-  const { reportId, question } = await request.json()
+  const { reportId } = await request.json()
 
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,18 +42,17 @@ export async function POST(request: Request) {
         parts: [
           { inlineData: { mimeType, data: base64 } },
           {
-            text: `Based on this medical report, answer the following question in plain, simple language.
+            text: `Read this medical report and identify any of the following, if mentioned: blood type, drug/food allergies, currently prescribed medications, and existing/diagnosed medical conditions (not just symptoms from this one visit — only ongoing conditions).
 
-            Respond ONLY with valid JSON in exactly this format, no other text:
-            {
-              "answer": "your plain-language answer here",
-              "reasoning": "a short explanation of which part of the report you used and how you arrived at this answer",
-              "source_text": "the exact short snippet from the report that supports this answer, or empty string if not found in the report"
-            }
+Respond ONLY with valid JSON in exactly this format, no other text:
+{
+  "blood_type": { "value": "O+", "confidence": "high", "source_text": "Blood Group: O+" },
+  "allergies": { "value": "Penicillin", "confidence": "medium", "source_text": "..." },
+  "current_medications": { "value": "Metformin 500mg twice daily", "confidence": "high", "source_text": "..." },
+  "medical_conditions": { "value": "Type 2 Diabetes", "confidence": "high", "source_text": "..." }
+}
 
-            If the answer isn't clearly in the report, say so in "answer" rather than guessing, and leave "source_text" empty. Always remind the user in "answer" to confirm anything important with a doctor.
-
-            Question: ${question}`,
+For any field not found in the report, set "value" to an empty string and "confidence" to "low", with empty source_text. Do not guess or invent information not present in the report.`,
           },
         ],
       },
@@ -65,7 +64,7 @@ export async function POST(request: Request) {
     const cleaned = response.text?.replace(/```json|```/g, '').trim() || '{}'
     result = JSON.parse(cleaned)
   } catch (e) {
-    result = { answer: response.text, reasoning: '', source_text: '' }
+    return NextResponse.json({ error: 'Could not parse AI response' }, { status: 500 })
   }
 
   return NextResponse.json(result)

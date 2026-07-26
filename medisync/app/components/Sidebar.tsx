@@ -5,14 +5,17 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/Supabase'
 import type { User } from '@supabase/supabase-js'
-import { User as UserIcon, FileText, TrendingUp, ShieldAlert, QrCode, Settings, LogOut } from 'lucide-react'
+import { User as UserIcon, FileText, TrendingUp, ShieldAlert, QrCode, Settings, LogOut, GitCompare} from 'lucide-react'
+
 
 const navItems = [
   { href: '/profile', label: 'My Profile', icon: UserIcon },
   { href: '/reports', label: 'Summarization', icon: FileText },
   { href: '/trends', label: 'Health Trends', icon: TrendingUp },
-  { href: '/sos', label: 'SOS & Emergency', icon: ShieldAlert },
+  { href: '/compare', label: 'Compare Reports', icon: GitCompare },
+  //{ href: '/sos', label: 'SOS & Emergency', icon: ShieldAlert },
   { href: '/sos', label: 'Medical QR Code', icon: QrCode },
+  { href: '/upload', label: 'Upload Report', icon: FileText },
 ]
 
 const publicRoutes = ['/login', '/signup', '/Signup']

@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
-  const { reportId, question } = await request.json()
+  const { reportId, question, answer } = await request.json()
 
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,31 +42,14 @@ export async function POST(request: Request) {
         parts: [
           { inlineData: { mimeType, data: base64 } },
           {
-            text: `Based on this medical report, answer the following question in plain, simple language.
+            text: `Earlier you were asked: "${question}" and answered: "${answer}"
 
-            Respond ONLY with valid JSON in exactly this format, no other text:
-            {
-              "answer": "your plain-language answer here",
-              "reasoning": "a short explanation of which part of the report you used and how you arrived at this answer",
-              "source_text": "the exact short snippet from the report that supports this answer, or empty string if not found in the report"
-            }
-
-            If the answer isn't clearly in the report, say so in "answer" rather than guessing, and leave "source_text" empty. Always remind the user in "answer" to confirm anything important with a doctor.
-
-            Question: ${question}`,
+Now explain your reasoning in more depth — walk through step by step how you arrived at this answer using the report, what specific data points you relied on, and note any assumptions or limitations in your interpretation. Keep it plain-language, 3-5 sentences.`,
           },
         ],
       },
     ],
   })
 
-  let result
-  try {
-    const cleaned = response.text?.replace(/```json|```/g, '').trim() || '{}'
-    result = JSON.parse(cleaned)
-  } catch (e) {
-    result = { answer: response.text, reasoning: '', source_text: '' }
-  }
-
-  return NextResponse.json(result)
+  return NextResponse.json({ explanation: response.text })
 }
