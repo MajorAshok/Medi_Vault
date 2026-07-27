@@ -3,13 +3,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/Supabase'
 import { Button } from '@/components/ui/button'
-import QRCode from 'react-qr-code'
 
 export default function Profile() {
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [email, setEmail] = useState('')
-  const [userId, setUserId] = useState('')
 
   const [fullName, setFullName] = useState('')
   const [phoneNumber, setPhoneNumber] = useState('')
@@ -17,20 +15,32 @@ export default function Profile() {
   const [gender, setGender] = useState('')
   const [address, setAddress] = useState('')
   const [bloodType, setBloodType] = useState('')
+  const [avatarPath, setAvatarPath] = useState('')
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+
   const [allergies, setAllergies] = useState('')
   const [currentMedications, setCurrentMedications] = useState('')
   const [medicalConditions, setMedicalConditions] = useState('')
-  const [organDonor, setOrganDonor] = useState(false)
+  const [organDonor, setOrganDonor] = useState('No')
   const [primaryEmergencyContact, setPrimaryEmergencyContact] = useState('')
   const [secondaryEmergencyContact, setSecondaryEmergencyContact] = useState('')
-  const [avatarPath, setAvatarPath] = useState('')
-  const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     loadProfile()
   }, [])
+
+  const calculateAge = (dobString: string) => {
+    if (!dobString) return ''
+    const dob = new Date(dobString)
+    const diff = Date.now() - dob.getTime()
+    const ageDate = new Date(diff)
+    const calculated = Math.abs(ageDate.getUTCFullYear() - 1970)
+    return isNaN(calculated) ? '' : `${calculated} years`
+  }
+
+  const ageText = calculateAge(dateOfBirth)
 
   async function loadProfile() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -42,7 +52,6 @@ export default function Profile() {
     }
 
     setEmail(user.email || '')
-    setUserId(user.id)
 
     const { data, error } = await supabase
       .from('profiles')
@@ -50,35 +59,27 @@ export default function Profile() {
       .eq('id', user.id)
       .single()
 
-    if (error) {
-      setMessage(`Error loading profile: ${error.message}`)
-    } else if (data) {
+    if (!error && data) {
       setFullName(data.full_name || '')
       setPhoneNumber(data.phone_number || '')
       setDateOfBirth(data.date_of_birth || '')
       setGender(data.gender || '')
       setAddress(data.address || '')
       setBloodType(data.blood_type || '')
+      setAvatarPath(data.avatar_path || '')
       setAllergies(data.allergies || '')
       setCurrentMedications(data.current_medications || '')
       setMedicalConditions(data.medical_conditions || '')
-      setOrganDonor(data.organ_donor || false)
+      if (typeof data.organ_donor === 'boolean') {
+        setOrganDonor(data.organ_donor ? 'Yes' : 'No')
+      } else {
+        setOrganDonor(data.organ_donor || 'No')
+      }
       setPrimaryEmergencyContact(data.primary_emergency_contact || '')
       setSecondaryEmergencyContact(data.secondary_emergency_contact || '')
-      setAvatarPath(data.avatar_path || '')
     }
 
     setLoading(false)
-  }
-
-  function calculateAge(dob: string) {
-    if (!dob) return null
-    const birthDate = new Date(dob)
-    const today = new Date()
-    let age = today.getFullYear() - birthDate.getFullYear()
-    const m = today.getMonth() - birthDate.getMonth()
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--
-    return age
   }
 
   async function handleAvatarUpload(file: File) {
@@ -132,156 +133,168 @@ export default function Profile() {
 
     const { error } = await supabase
       .from('profiles')
-      .update({
+      .upsert({
+        id: user.id,
         full_name: fullName,
         phone_number: phoneNumber,
         date_of_birth: dateOfBirth || null,
         gender: gender,
         address: address,
         blood_type: bloodType,
+        avatar_path: avatarPath,
         allergies: allergies,
         current_medications: currentMedications,
         medical_conditions: medicalConditions,
         organ_donor: organDonor,
         primary_emergency_contact: primaryEmergencyContact,
         secondary_emergency_contact: secondaryEmergencyContact,
-        avatar_path: avatarPath,
       })
-      .eq('id', user.id)
 
     if (error) {
       setMessage(`Error saving: ${error.message}`)
     } else {
-      setMessage('Profile saved.')
+      setMessage('Profile saved successfully.')
     }
   }
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-background text-muted-foreground text-sm">
+      <main className="min-h-screen flex items-center justify-center bg-neutral-950 text-neutral-400 text-sm">
         Loading...
       </main>
     )
   }
 
-  const age = calculateAge(dateOfBirth)
   const avatarUrl = getAvatarUrl(avatarPath)
 
   const inputClass =
-    "w-full rounded-lg border border-border bg-input/30 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
-  const labelClass = "text-xs font-medium text-muted-foreground mb-1 block"
+    "w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-800 outline-none transition focus:border-purple-500 focus:bg-white focus:ring-2 focus:ring-purple-100"
+  const labelClass = "text-xs font-semibold text-neutral-500 mb-1.5 block tracking-wide uppercase"
 
   return (
-    <main className="relative min-h-screen overflow-hidden">
-      <style>{`
-        @keyframes ring-spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .avatar-ring {
-          background: conic-gradient(
-            from 0deg,
-            #10b981, #06b6d4, #8b5cf6, #ec4899, #f59e0b, #10b981
-          );
-          animation: ring-spin 4s linear infinite;
-        }
-      `}</style>
+    <main className="relative min-h-screen flex-1 overflow-y-auto p-6 lg:p-10 bg-gradient-to-br from-[#c084fc] via-[#f472b6] to-[#fb7185]">
 
-      <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute -top-40 left-0 h-[30rem] w-[30rem] rounded-full bg-emerald-500/15 blur-[100px]" />
-        <div className="absolute top-0 right-0 h-[26rem] w-[26rem] rounded-full bg-fuchsia-500/10 blur-[100px]" />
-        <div className="absolute bottom-0 left-1/3 h-[28rem] w-[28rem] rounded-full bg-primary/20 blur-[100px]" />
-        <div className="absolute bottom-0 right-1/4 h-[22rem] w-[22rem] rounded-full bg-chart-2/15 blur-[100px]" />
+      {/* Heavy blurred ambient background glowing circles */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute -top-32 -left-24 h-[45rem] w-[45rem] rounded-full bg-orange-300/60 blur-[160px]" />
+        <div className="absolute top-1/3 right-0 h-[42rem] w-[42rem] rounded-full bg-pink-400/50 blur-[160px]" />
+        <div className="absolute -bottom-20 left-1/3 h-[45rem] w-[45rem] rounded-full bg-purple-500/60 blur-[180px]" />
       </div>
 
-      <div className="relative max-w-6xl mx-auto px-6 py-8 lg:px-10">
-        <h1 className="font-heading text-2xl font-semibold text-foreground mb-6 tracking-tight">
-          My Profile
-        </h1>
+      <div className="relative max-w-5xl mx-auto w-full">
+        <div className="rounded-3xl bg-white/95 backdrop-blur-3xl shadow-2xl overflow-hidden border border-white/50">
 
-        <section className="relative rounded-3xl border border-white/10 bg-card/40 backdrop-blur-xl p-8 mb-6 overflow-hidden">
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-fuchsia-500/10" />
-          <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-6">
+          {/* Banner strip — MediSync brand mark */}
+          <div className="h-42 bg-gradient-to-r from-orange-300 via-pink-300 to-violet-400 relative p-4 lg:px-8 flex flex-col items-center justify-start pt-6 text-center">
+            <div className="absolute inset-0 bg-white/20 backdrop-blur-[4px]" />
+            <div className="absolute top-10 right-6 z-10">
+              <Button
+                onClick={handleSave}
+                className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-600/30 rounded-xl px-6 font-semibold"
+              >
+                Save profile
+              </Button>
+            </div>
 
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/jpeg,image/png,image/webp"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) handleAvatarUpload(file)
-              }}
-              className="hidden"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingAvatar}
-              className="relative shrink-0 group h-[9.5rem] w-[9.5rem] sm:h-[10.5rem] sm:w-[10.5rem] rounded-full"
-            >
-              {/* rotating ring layer — behind everything, only this spins */}
-              <div className="absolute inset-0 rounded-full avatar-ring" />
+            <div className="relative z-10 flex flex-col items-center justify-center gap-0">
+              <div className="flex items-center justify-center gap-4 overflow-visible">
+                <img
+                  src="/medisync-logo.png"
+                  alt="MediSync"
+                  className="h-28 w-24 object-contain shrink-0"
+                />
+                <span
+                  className="text-5xl tracking-wide font-extrabold bg-gradient-to-r from-neutral-950 via-teal-500 to-rose-500"
+                  style={{
+                    fontFamily: 'var(--font-brand)',
+                    lineHeight: 1.2,
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    color: 'transparent',
+                  }}
+                >
+                  MediSync
+                </span>
+              </div>
+              <p className="text-xs lg:text-sm text-neutral-800 font-bold tracking-wide -mt-2 uppercase max-w-md mx-auto ml-9">
+                Your intelligent health & emergency companion
+              </p>
+            </div>
+          </div>
 
-              {/* static photo layer — sits on top, does not rotate */}
-              <div className="absolute inset-[3px] rounded-full bg-background p-1">
+          {/* Header row with Profile Photo Avatar */}
+          <div className="px-8 pt-0 pb-6 -mt-17 flex items-end justify-between flex-wrap gap-4 relative z-10">
+            <div className="flex items-end gap-5">
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleAvatarUpload(file)
+                }}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingAvatar}
+                className="relative shrink-0 group h-36 w-36 rounded-full ring-4 ring-white shadow-2xl overflow-hidden bg-purple-100"
+              >
                 {avatarUrl ? (
                   <img
                     src={avatarUrl}
                     alt="Profile"
-                    className="h-full w-full rounded-full object-cover"
+                    className="h-full w-full object-cover"
                   />
                 ) : (
-                  <div className="h-full w-full rounded-full bg-muted flex items-center justify-center text-muted-foreground text-sm">
-                    No photo
+                  <div className="h-full w-full flex items-center justify-center text-purple-600 text-sm font-semibold">
+                    Add photo
                   </div>
                 )}
-              </div>
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-medium">
+                  {uploadingAvatar ? 'Uploading...' : 'Change photo'}
+                </div>
+              </button>
 
-              <div className="absolute inset-[3px] rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs">
-                {uploadingAvatar ? 'Uploading...' : 'Change'}
+              <div className="pb-2 pt-3">
+                <h1 className="text-2xl font-extrabold text-neutral-900 tracking-tight">
+                  {fullName || 'Your Name'}
+                </h1>
+                <p className="text-sm text-neutral-500">{email}</p>
               </div>
-            </button>
-
-            <div className="flex-1 text-center sm:text-left">
-              <h2 className="font-heading text-xl font-semibold text-foreground">
-                {fullName || 'Your Name'}
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">{email}</p>
-              <p className="text-xs text-muted-foreground mt-3">
-                Tap your photo to change it
-              </p>
             </div>
           </div>
-        </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2 flex flex-col gap-5">
-            <section className="rounded-2xl border border-border bg-card p-6">
-              <h2 className="font-heading text-sm font-semibold text-foreground mb-4">
-                Personal Information
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Form Fields Grid */}
+          <div className="px-8 pb-12 space-y-8">
+
+            {/* Personal Details Section */}
+            <div className="mt-4">
+              <h2 className="text-sm font-bold text-purple-700 tracking-wider uppercase mb-4">Personal Details</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-5">
                 <div className="sm:col-span-2">
-                  <label className={labelClass}>Full Name</label>
+                  <label className={labelClass}>Full name</label>
                   <input
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     className={inputClass}
-                    placeholder="Full name"
+                    placeholder="Your full name"
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Phone Number</label>
+                  <label className={labelClass}>Phone number</label>
                   <input
                     type="text"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                     className={inputClass}
-                    placeholder="Phone number"
+                    placeholder="Your phone number"
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Date of Birth</label>
+                  <label className={labelClass}>Date of birth</label>
                   <input
                     type="date"
                     value={dateOfBirth}
@@ -290,10 +303,14 @@ export default function Profile() {
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Age</label>
-                  <div className={`${inputClass} flex items-center text-muted-foreground`}>
-                    {age !== null ? age : '—'}
-                  </div>
+                  <label className={labelClass}>Age (Auto-calculated)</label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={ageText}
+                    className="w-full rounded-xl border border-neutral-200 bg-neutral-100 px-4 py-3 text-sm text-neutral-600 outline-none cursor-not-allowed font-medium"
+                    placeholder="Auto-calculated"
+                  />
                 </div>
                 <div>
                   <label className={labelClass}>Gender</label>
@@ -302,22 +319,12 @@ export default function Profile() {
                     onChange={(e) => setGender(e.target.value)}
                     className={inputClass}
                   >
-                    <option value="">Select</option>
+                    <option value="">Select gender</option>
                     <option value="female">Female</option>
                     <option value="male">Male</option>
                     <option value="other">Other</option>
                     <option value="prefer_not_to_say">Prefer not to say</option>
                   </select>
-                </div>
-                <div>
-                  <label className={labelClass}>Blood Type</label>
-                  <input
-                    type="text"
-                    value={bloodType}
-                    onChange={(e) => setBloodType(e.target.value)}
-                    className={inputClass}
-                    placeholder="e.g. O+"
-                  />
                 </div>
                 <div className="sm:col-span-3">
                   <label className={labelClass}>Address</label>
@@ -330,102 +337,112 @@ export default function Profile() {
                   />
                 </div>
               </div>
-            </section>
+            </div>
 
-            {userId && (
-              <section className="rounded-2xl border border-border bg-card p-6 flex flex-col sm:flex-row items-center gap-6">
-                <div className="p-3 bg-white rounded-xl shrink-0">
-                  <QRCode value={`${window.location.origin}/sos/${userId}`} size={120} />
-                </div>
-                <div className="text-center sm:text-left">
-                  <h2 className="font-heading text-sm font-semibold text-foreground mb-1">
-                    Your Emergency QR Code
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    Scan to view your emergency info — blood type and emergency contact only, visible without logging in.
-                  </p>
-                </div>
-              </section>
-            )}
-          </div>
-
-          <section className="relative rounded-2xl border border-white/10 bg-card/40 backdrop-blur-xl p-5 shadow-lg overflow-hidden self-start">
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-fuchsia-500/10" />
-            <div className="relative flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-destructive" />
-                <h2 className="font-heading text-sm font-semibold text-foreground">
-                  Emergency Information
-                </h2>
-              </div>
-
-              <div>
-                <label className={labelClass}>Allergies</label>
-                <textarea
-                  value={allergies}
-                  onChange={(e) => setAllergies(e.target.value)}
-                  className={inputClass}
-                  rows={2}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Current Medications</label>
-                <textarea
-                  value={currentMedications}
-                  onChange={(e) => setCurrentMedications(e.target.value)}
-                  className={inputClass}
-                  rows={2}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Medical Conditions</label>
-                <textarea
-                  value={medicalConditions}
-                  onChange={(e) => setMedicalConditions(e.target.value)}
-                  className={inputClass}
-                  rows={2}
-                />
-              </div>
-
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={organDonor}
-                  onChange={(e) => setOrganDonor(e.target.checked)}
-                  className="rounded border-border"
-                />
-                Organ Donor
-              </label>
-
-              <div className="border-t border-white/10 pt-3 flex flex-col gap-3">
+            {/* Medical Information Section */}
+            <div className="pt-3 border-t border-neutral-100">
+              <h2 className="text-sm font-bold text-purple-700 tracking-wider uppercase mb-4">Medical Information</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
                 <div>
-                  <label className={labelClass}>Primary Emergency Contact</label>
+                  <label className={labelClass}>Blood type</label>
+                  <input
+                    type="text"
+                    value={bloodType}
+                    onChange={(e) => setBloodType(e.target.value)}
+                    className={inputClass}
+                    placeholder="e.g. O+, A-"
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Organ donor status</label>
+                  <select
+                    value={organDonor}
+                    onChange={(e) => setOrganDonor(e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={labelClass}>Allergies</label>
+                  <textarea
+                    rows={2}
+                    value={allergies}
+                    onChange={(e) => setAllergies(e.target.value)}
+                    className={inputClass}
+                    placeholder="List any drug, food, or environmental allergies..."
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={labelClass}>Current medications</label>
+                  <textarea
+                    rows={2}
+                    value={currentMedications}
+                    onChange={(e) => setCurrentMedications(e.target.value)}
+                    className={inputClass}
+                    placeholder="List prescription medications, dosages, or supplements..."
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={labelClass}>Medical conditions</label>
+                  <textarea
+                    rows={2}
+                    value={medicalConditions}
+                    onChange={(e) => setMedicalConditions(e.target.value)}
+                    className={inputClass}
+                    placeholder="List chronic conditions, past surgeries, or medical notes..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Emergency Contacts Section */}
+            <div className="pt-6 border-t border-neutral-100">
+              <h2 className="text-sm font-bold text-purple-700 tracking-wider uppercase mb-4">Emergency Contacts</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+                <div>
+                  <label className={labelClass}>Primary emergency contact</label>
                   <input
                     type="text"
                     value={primaryEmergencyContact}
                     onChange={(e) => setPrimaryEmergencyContact(e.target.value)}
                     className={inputClass}
+                    placeholder= "phone number"
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Secondary Emergency Contact</label>
+                  <label className={labelClass}>Secondary emergency contact</label>
                   <input
                     type="text"
                     value={secondaryEmergencyContact}
                     onChange={(e) => setSecondaryEmergencyContact(e.target.value)}
                     className={inputClass}
+                    placeholder="phone number"
                   />
                 </div>
               </div>
             </div>
-          </section>
-        </div>
 
-        <div className="mt-5 flex items-center justify-between rounded-2xl border border-border bg-card px-6 py-4">
-          <p className="text-xs text-muted-foreground">
-            {message || 'Changes are saved only when you click Save.'}
-          </p>
-          <Button onClick={handleSave}>Save Profile</Button>
+            {/* Read-Only Email Display */}
+            <div className="pt-6 border-t border-neutral-100">
+              <p className={labelClass}>My email address (Read-only)</p>
+              <div className="flex items-center gap-3.5 bg-neutral-50 rounded-2xl p-4 border border-neutral-100">
+                <div className="h-10 w-10 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 shrink-0 font-bold">
+                  ✉
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-neutral-800">{email}</p>
+                  <p className="text-xs text-neutral-400">Authenticated primary account</p>
+                </div>
+              </div>
+            </div>
+
+            {message && (
+              <p className="text-xs font-medium text-purple-700 bg-purple-50 p-3 rounded-xl border border-purple-100">{message}</p>
+            )}
+
+          </div>
         </div>
       </div>
     </main>

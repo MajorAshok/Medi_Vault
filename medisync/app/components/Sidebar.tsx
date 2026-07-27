@@ -5,15 +5,13 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/Supabase'
 import type { User } from '@supabase/supabase-js'
-import { User as UserIcon, FileText, TrendingUp, ShieldAlert, QrCode, Settings, LogOut, GitCompare} from 'lucide-react'
-
+import { User as UserIcon, FileText, TrendingUp, QrCode, Settings, LogOut, GitCompare } from 'lucide-react'
 
 const navItems = [
   { href: '/profile', label: 'My Profile', icon: UserIcon },
   { href: '/reports', label: 'Summarization', icon: FileText },
   { href: '/trends', label: 'Health Trends', icon: TrendingUp },
   { href: '/compare', label: 'Compare Reports', icon: GitCompare },
-  //{ href: '/sos', label: 'SOS & Emergency', icon: ShieldAlert },
   { href: '/sos', label: 'Medical QR Code', icon: QrCode },
   { href: '/upload', label: 'Upload Report', icon: FileText },
 ]
@@ -41,54 +39,76 @@ export default function Sidebar() {
 
   if (!user || isPublicRoute) return null
 
+  const username = user.email ? user.email.split('@')[0] : 'User'
+
   return (
-    <aside className="hidden md:flex flex-col w-20 lg:w-60 shrink-0 h-screen sticky top-0 p-4">
-      <div className="flex flex-col h-full rounded-2xl border border-white/10 bg-card/40 backdrop-blur-xl shadow-lg overflow-hidden">
-        <div className="p-4 border-b border-white/10 flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
-            <ShieldAlert className="h-4 w-4 text-primary-foreground" />
+    <aside className="hidden md:flex flex-col w-20 lg:w-72 shrink-0 h-screen sticky top-0 p-4 z-20">
+      <div className="flex flex-col h-full rounded-3xl bg-white/10 backdrop-blur-2xl shadow-2xl border border-white/20 overflow-hidden text-white">
+
+        {/* Reverted to "Good morning ✨" with username */}
+        <div className="p-4 lg:p-5 flex items-center gap-3.5">
+          <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center shrink-0 border border-white/30 shadow-sm">
+            <UserIcon className="h-4.5 w-4.5 text-white" />
           </div>
-          <span className="font-heading text-lg font-semibold text-foreground hidden lg:block">
-            MediSync
-          </span>
+          <div className="hidden lg:block overflow-hidden">
+            <span className="text-[11px] text-purple-200 font-medium block">Good morning ✨</span>
+            <span className="text-sm font-bold text-white truncate capitalize block">
+              {username}
+            </span>
+          </div>
         </div>
 
-        <nav className="flex-1 flex flex-col gap-1 p-3">
-          {navItems.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href
-            return (
-              <Link
-                key={label}
-                href={href}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
-                  active
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                }`}
-              >
-                <Icon className="h-5 w-5 shrink-0" />
-                <span className="hidden lg:inline">{label}</span>
-              </Link>
-            )
-          })}
-        </nav>
-
-        <div className="p-3 border-t border-white/10 flex flex-col gap-1">
-          <Link
-            href="/settings"
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition"
-          >
-            <Settings className="h-5 w-5 shrink-0" />
-            <span className="hidden lg:inline">Settings</span>
-          </Link>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-3 w-full rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition"
-          >
-            <LogOut className="h-5 w-5 shrink-0" />
-            <span className="hidden lg:inline">Log Out</span>
-          </button>
+        {/* Menu section */}
+        <div className="px-3 lg:px-4 mt-2">
+          <p className="hidden lg:block text-[11px] font-semibold tracking-wider text-purple-300 uppercase px-3 mb-2">
+            Menu
+          </p>
+          <nav className="flex flex-col gap-1.5">
+            {navItems.map(({ href, label, icon: Icon }) => {
+              const active = pathname === href
+              return (
+                <Link
+                  key={label}
+                  href={href}
+                  className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm transition font-medium ${
+                    active
+                      ? 'bg-purple-600/80 text-white shadow-lg shadow-purple-900/40 border border-purple-400/30'
+                      : 'text-white/80 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <Icon className="h-4.5 w-4.5 shrink-0" />
+                  <span className="hidden lg:inline">{label}</span>
+                </Link>
+              )
+            })}
+          </nav>
         </div>
+
+        <div className="flex-1" />
+
+        {/* Settings section */}
+        <div className="px-3 lg:px-4 pb-4">
+          <p className="hidden lg:block text-[11px] font-semibold tracking-wider text-purple-300 uppercase px-3 mb-2">
+            Settings
+          </p>
+          <div className="flex flex-col gap-1.5">
+            <Link
+              href="/settings"
+              className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition"
+            >
+              <Settings className="h-4.5 w-4.5 shrink-0" />
+              <span className="hidden lg:inline">Settings</span>
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-3 w-full rounded-xl px-3.5 py-2.5 text-sm font-medium text-white/80 hover:bg-rose-500/20 hover:text-rose-300 transition"
+            >
+              <LogOut className="h-4.5 w-4.5 shrink-0" />
+              <span className="hidden lg:inline">Log out</span>
+            </button>
+          </div>
+        </div>
+
       </div>
     </aside>
   )
