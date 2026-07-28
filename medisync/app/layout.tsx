@@ -4,6 +4,10 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import Sidebar from "./components/Sidebar";
 
+import { LanguageProvider } from "@/contexts/LanguageContext";
+
+import { LanguageFloatingToggle } from "@/components/LanguageFloatingToggle";
+
 const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono' });
 
 const baloo2 = Baloo_2({
@@ -60,8 +64,13 @@ export default function RootLayout({
       )}
     >
       <body className="min-h-full flex bg-background">
-        <Sidebar />
-        <div className="flex-1 min-w-0">{children}</div>
+        
+        <LanguageProvider>
+          <Sidebar />
+          <div className="flex-1 min-w-0">{children}</div>
+          {
+          <LanguageFloatingToggle />}
+        </LanguageProvider>
       </body>
     </html>
   );

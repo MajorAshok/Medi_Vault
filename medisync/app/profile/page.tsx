@@ -24,6 +24,9 @@ export default function Profile() {
   const [organDonor, setOrganDonor] = useState('No')
   const [primaryEmergencyContact, setPrimaryEmergencyContact] = useState('')
   const [secondaryEmergencyContact, setSecondaryEmergencyContact] = useState('')
+  
+  const [primaryContactName, setPrimaryContactName] = useState('')
+  const [secondaryContactName, setSecondaryContactName] = useState('')
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -77,6 +80,9 @@ export default function Profile() {
       }
       setPrimaryEmergencyContact(data.primary_emergency_contact || '')
       setSecondaryEmergencyContact(data.secondary_emergency_contact || '')
+     
+      setPrimaryContactName(data.primary_contact_name || '')
+      setSecondaryContactName(data.secondary_contact_name || '')
     }
 
     setLoading(false)
@@ -148,6 +154,9 @@ export default function Profile() {
         organ_donor: organDonor,
         primary_emergency_contact: primaryEmergencyContact,
         secondary_emergency_contact: secondaryEmergencyContact,
+        // [TWILIO - ADDED] save the two new name columns
+        primary_contact_name: primaryContactName,
+        secondary_contact_name: secondaryContactName,
       })
 
     if (error) {
@@ -397,10 +406,21 @@ export default function Profile() {
               </div>
             </div>
 
-            {/* Emergency Contacts Section */}
+            
             <div className="pt-6 border-t border-neutral-100">
               <h2 className="text-sm font-bold text-purple-700 tracking-wider uppercase mb-4">Emergency Contacts</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+                <div>
+                  <label className={labelClass}>Primary contact name</label>
+                  
+                  <input
+                    type="text"
+                    value={primaryContactName}
+                    onChange={(e) => setPrimaryContactName(e.target.value)}
+                    className={inputClass}
+                    placeholder="e.g. Mom, Ravi Sharma"
+                  />
+                </div>
                 <div>
                   <label className={labelClass}>Primary emergency contact</label>
                   <input
@@ -408,7 +428,18 @@ export default function Profile() {
                     value={primaryEmergencyContact}
                     onChange={(e) => setPrimaryEmergencyContact(e.target.value)}
                     className={inputClass}
-                    placeholder= "phone number"
+                    placeholder="phone number"
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Secondary contact name</label>
+                  
+                  <input
+                    type="text"
+                    value={secondaryContactName}
+                    onChange={(e) => setSecondaryContactName(e.target.value)}
+                    className={inputClass}
+                    placeholder="e.g. Dad, Priya Patel"
                   />
                 </div>
                 <div>

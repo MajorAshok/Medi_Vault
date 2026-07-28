@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/Supabase'
+import NotifyButton from '@/components/NotifyButton'
 
 export default async function SosPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -53,9 +54,10 @@ export default async function SosPage({ params }: { params: Promise<{ id: string
         <p><strong>Current Medications:</strong> {data.current_medications || 'None listed'}</p>
         <p><strong>Medical Conditions:</strong> {data.medical_conditions || 'None listed'}</p>
         <p><strong>Organ Donor:</strong> {data.organ_donor ? 'Yes' : 'No'}</p>
-        <p><strong>Primary Emergency Contact:</strong> {data.primary_emergency_contact || 'Not provided'}</p>
-        <p><strong>Secondary Emergency Contact:</strong> {data.secondary_emergency_contact || 'Not provided'}</p>
       </div>
+
+      {/* [TWILIO - ADDED] lets whoever finds the patient alert their emergency contacts directly */}
+      <NotifyButton profileId={id} />
     </main>
   )
 }

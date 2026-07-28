@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/Supabase'
+import { useLanguage } from '@/contexts/LanguageContext' 
 
 type Report = {
     id: string
@@ -57,6 +58,11 @@ export default function Reports() {
     const [profileSuggestions, setProfileSuggestions] = useState<Record<string, ProfileSuggestions>>({})
     const [suggestingId, setSuggestingId] = useState<string | null>(null)
     const [savingProfileId, setSavingProfileId] = useState<string | null>(null)
+
+    const { language: globalLang } = useLanguage() // [BILINGUAL - ADDED] global default from floating toggle
+    const [reportLang, setReportLang] = useState<Record<string, 'en' | 'hi'>>({}) // [BILINGUAL - ADDED] per-report override, same pattern as `questions`
+
+    
 
     useEffect(() => {
         loadReports()
@@ -164,6 +170,11 @@ export default function Reports() {
             updated.splice(index, 1)
             return { ...prev, [reportId]: updated }
         })
+    }
+
+    
+    function getLangFor(reportId: string) {
+        return reportLang[reportId] || globalLang
     }
 
     async function handleSaveReadings(reportId: string) {
