@@ -1,13 +1,15 @@
 import { GoogleGenAI } from '@google/genai'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { sendSMS } from '@/lib/twilio'
+import { Buffer } from 'buffer'
+
+export const runtime = 'nodejs'
 
 type Reading = {
   reading_type: string
   value: number | string
-  unit?: string | null
-  reading_date?: string | null
+  unit: string
+  reading_date: string | null
   confidence?: 'high' | 'medium' | 'low'
   source_text?: string
 }
@@ -18,6 +20,24 @@ function readingTypeToTestName(readingType: string) {
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+function extractJson(text: string) {
+  const cleaned = text.replace(/```json|```/g, '').trim()
+
+  try {
+    return JSON.parse(cleaned)
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/)
+
+    if (!match) return null
+
+    try {
+      return JSON.parse(match[0])
+    } catch {
+      return null
+    }
+  }
+}
+
 function isCriticalSeverity(severityData: any) {
   if (!severityData) return false
 
@@ -25,71 +45,48 @@ function isCriticalSeverity(severityData: any) {
     return true
   }
 
-  return severityData.assessments?.some((item: any) =>
-    item.severity === 'critical_low' || item.severity === 'critical_high'
+  return severityData.assessments?.some(
+    (item: any) =>
+      item.severity === 'critical_low' ||
+      item.severity === 'critical_high'
   )
-}
-
-function buildCriticalSmsMessage(profile: any, severityData: any) {
-  const patientName = profile?.full_name || 'A patient'
-
-  const criticalItems =
-    severityData?.assessments
-      ?.filter((item: any) =>
-        item.severity === 'critical_low' || item.severity === 'critical_high'
-      )
-      ?.map((item: any) => {
-        const unitText = item.unit ? ` ${item.unit}` : ''
-        return `${item.testName}: ${item.value}${unitText}`
-      })
-      ?.join(', ') || 'critical report values'
-
-  return `Emergency Alert from MediSync: ${patientName}'s medical report shows critical values: ${criticalItems}. Please check on them.`
-}
-
-async function notifyEmergencyContacts(profile: any, severityData: any) {
-  const smsMessage = buildCriticalSmsMessage(profile, severityData)
-
-  const notificationResults: any[] = []
-
-  if (profile.primary_emergency_contact) {
-    const greeting = profile.primary_contact_name
-      ? `Hi ${profile.primary_contact_name}, `
-      : ''
-
-    await sendSMS(profile.primary_emergency_contact, `${greeting}${smsMessage}`)
-
-    notificationResults.push({
-      contactType: 'primary',
-      sent: true,
-      to: profile.primary_emergency_contact,
-    })
-  }
-
-  if (profile.secondary_emergency_contact) {
-    const greeting = profile.secondary_contact_name
-      ? `Hi ${profile.secondary_contact_name}, `
-      : ''
-
-    await sendSMS(profile.secondary_emergency_contact, `${greeting}${smsMessage}`)
-
-    notificationResults.push({
-      contactType: 'secondary',
-      sent: true,
-      to: profile.secondary_emergency_contact,
-    })
-  }
-
-  return notificationResults
 }
 
 export async function POST(request: Request) {
   try {
     const { reportId } = await request.json()
 
+    if (!reportId) {
+      return NextResponse.json(
+        { error: 'Missing reportId' },
+        { status: 400 }
+      )
+    }
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return NextResponse.json(
+        { error: 'Missing NEXT_PUBLIC_SUPABASE_URL' },
+        { status: 500 }
+      )
+    }
+
+    if (!process.env.SUPABASE_SECRET_KEY) {
+      return NextResponse.json(
+        { error: 'Missing SUPABASE_SECRET_KEY' },
+        { status: 500 }
+      )
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json(
+        { error: 'Missing GEMINI_API_KEY' },
+        { status: 500 }
+      )
+    }
+
     const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SECRET_KEY!
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SECRET_KEY
     )
 
     const { data: report, error: fetchError } = await supabaseAdmin
@@ -99,7 +96,12 @@ export async function POST(request: Request) {
       .single()
 
     if (fetchError || !report) {
-      return NextResponse.json({ error: 'Report not found' }, { status: 404 })
+      console.error('Report fetch error:', fetchError)
+
+      return NextResponse.json(
+        { error: 'Report not found' },
+        { status: 404 }
+      )
     }
 
     const { data: fileData, error: downloadError } = await supabaseAdmin.storage
@@ -107,14 +109,21 @@ export async function POST(request: Request) {
       .download(report.file_path)
 
     if (downloadError || !fileData) {
-      return NextResponse.json({ error: 'Could not download file' }, { status: 500 })
+      console.error('File download error:', downloadError)
+
+      return NextResponse.json(
+        { error: 'Could not download file' },
+        { status: 500 }
+      )
     }
 
     const arrayBuffer = await fileData.arrayBuffer()
     const base64 = Buffer.from(arrayBuffer).toString('base64')
     const mimeType = fileData.type || 'application/pdf'
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
+    const ai = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+    })
 
     const response = await ai.models.generateContent({
       model: 'gemini-flash-latest',
@@ -122,7 +131,12 @@ export async function POST(request: Request) {
         {
           role: 'user',
           parts: [
-            { inlineData: { mimeType, data: base64 } },
+            {
+              inlineData: {
+                mimeType,
+                data: base64,
+              },
+            },
             {
               text: `Extract any numeric health readings from this medical report.
 
@@ -145,7 +159,9 @@ Examples:
 - potassium
 - troponin
 
-Respond ONLY with valid JSON in exactly this format, no markdown, no extra text:
+Respond ONLY with valid JSON. No markdown. No extra text.
+
+Use exactly this format:
 
 {
   "readings": [
@@ -165,9 +181,6 @@ Rules:
 - value should be numeric when possible.
 - If no date is found, use null for reading_date.
 - confidence must be one of "high", "medium", or "low".
-- Use "high" if clearly printed/typed and unambiguous.
-- Use "medium" if it required interpretation.
-- Use "low" if handwritten, unclear, or uncertain.
 - source_text should be the exact short snippet from the report.
 - If nothing is extractable, return { "readings": [] }.`,
             },
@@ -176,98 +189,66 @@ Rules:
       ],
     })
 
+    const rawText = response.text || ''
+    const parsed = extractJson(rawText)
+
     let readings: Reading[] = []
 
-    try {
-      const cleaned = response.text?.replace(/```json|```/g, '').trim() || '{}'
-      const parsed = JSON.parse(cleaned)
+    if (parsed && Array.isArray(parsed.readings)) {
+      readings = parsed.readings
+    } else {
+      console.error('Could not parse Gemini response:', rawText)
 
-      readings = Array.isArray(parsed.readings) ? parsed.readings : []
-    } catch (e) {
-      return NextResponse.json(
-        {
-          error: 'Could not parse AI response',
-          rawResponse: response.text,
-        },
-        { status: 500 }
-      )
+      return NextResponse.json({
+        readings: [],
+        severity: null,
+        criticalDetected: false,
+        parseWarning: true,
+        rawResponse: rawText,
+      })
     }
 
     const severityInput = readings.map((reading) => ({
       testName: readingTypeToTestName(reading.reading_type),
       value: reading.value,
-      unit: reading.unit || undefined,
-      confidence: reading.confidence,
-      sourceText: reading.source_text,
+      unit: reading.unit,
+      confidence: reading.confidence || null,
+      sourceText: reading.source_text || null,
     }))
 
     let severityData: any = null
 
     if (severityInput.length > 0) {
-      const origin = new URL(request.url).origin
+      try {
+        const origin = new URL(request.url).origin
 
-      const severityResponse = await fetch(`${origin}/api/assess-severity`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          results: severityInput,
-        }),
-      })
+        const severityResponse = await fetch(`${origin}/api/assess-severity`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            results: severityInput,
+          }),
+        })
 
-      severityData = await severityResponse.json()
+        severityData = await severityResponse.json()
+      } catch (severityError) {
+        console.error('Severity route error:', severityError)
+        severityData = null
+      }
     }
 
     const criticalDetected = isCriticalSeverity(severityData)
-
-    const profileId =
-      report.user_id ||
-      report.profile_id ||
-      report.owner_id ||
-      report.created_by ||
-      null
-
-    let profile: any = null
-    let autoNotifyEnabled = false
-    let emergencyNotifications: any[] = []
-
-    if (criticalDetected && profileId) {
-      const { data: profileData } = await supabaseAdmin
-        .from('profiles')
-        .select(
-          'id, full_name, auto_notify_emergency, primary_emergency_contact, secondary_emergency_contact, primary_contact_name, secondary_contact_name'
-        )
-        .eq('id', profileId)
-        .single()
-
-      profile = profileData
-      autoNotifyEnabled = Boolean(profile?.auto_notify_emergency)
-
-      if (autoNotifyEnabled && profile) {
-        try {
-          emergencyNotifications = await notifyEmergencyContacts(profile, severityData)
-        } catch (smsError: any) {
-          emergencyNotifications = [
-            {
-              sent: false,
-              error: smsError.message || 'Failed to send emergency SMS.',
-            },
-          ]
-        }
-      }
-    }
 
     return NextResponse.json({
       readings,
       severity: severityData,
       criticalDetected,
-      autoNotifyEnabled,
-      emergencyNotifications,
-      shouldShowNotifyButton: criticalDetected && !autoNotifyEnabled,
-      profileId,
     })
   } catch (err: any) {
+    console.error('extract-readings fatal error:', err)
+
     return NextResponse.json(
       {
         error: err.message || 'Something went wrong while extracting readings.',

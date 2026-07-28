@@ -8,7 +8,7 @@ export async function sendSMS(to: string, body: string) {
 
     return client.messages.create({
         body,
-        from: process.env.TWILIO_PHONE_NUMBER,
-        to: formattedTo,
+        from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`, // [WHATSAPP - FIXED] prefix + correct env var
+        to: `whatsapp:${formattedTo}`,                            // [WHATSAPP - FIXED] prefix added
     })
 }

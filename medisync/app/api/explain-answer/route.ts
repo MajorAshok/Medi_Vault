@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
-  const { reportId, question, answer } = await request.json()
+  const { reportId, question, answer, language = 'en' } = await request.json()
 
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,6 +32,11 @@ export async function POST(request: Request) {
   const base64 = Buffer.from(arrayBuffer).toString('base64')
   const mimeType = fileData.type || 'application/pdf'
 
+  const languageInstruction =
+    language === 'hi'
+      ? 'Respond entirely in Hindi using Devanagari script. Do not use English except unavoidable medical/lab terms.'
+      : 'Respond in English.'
+
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
 
   const response = await ai.models.generateContent({
@@ -42,9 +47,24 @@ export async function POST(request: Request) {
         parts: [
           { inlineData: { mimeType, data: base64 } },
           {
-            text: `Earlier you were asked: "${question}" and answered: "${answer}"
+            text: `${languageInstruction}
 
-Now explain your reasoning in more depth — walk through step by step how you arrived at this answer using the report, what specific data points you relied on, and note any assumptions or limitations in your interpretation. Keep it plain-language, 3-5 sentences.`,
+Earlier you were asked:
+
+"${question}"
+
+And the answer was:
+
+"${answer}"
+
+Now explain the reasoning in more depth.
+
+Instructions:
+- Walk through step by step how this answer was reached using the report.
+- Mention the specific report data points used.
+- Mention any assumptions or limitations.
+- Keep it plain-language.
+- Keep it 3-5 sentences.`,
           },
         ],
       },

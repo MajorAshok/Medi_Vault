@@ -1,28 +1,35 @@
-// components/LanguageFloatingToggle.tsx
-"use client";
-import { useLanguage } from "@/contexts/LanguageContext";
+'use client'
 
-export function LanguageFloatingToggle() {
-  const { language, setLanguage } = useLanguage();
+import { useLanguage } from '@/contexts/LanguageContext'
+
+export default function LanguageToggle() {
+  const { language, setLanguage } = useLanguage()
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex gap-1 rounded-full border bg-white/90 backdrop-blur px-1.5 py-1.5 shadow-lg">
+    <div className="fixed right-3 top-18 z-[9999] flex rounded-full border border-white/20 bg-black/40 p-1 shadow-lg backdrop-blur-xl">
       <button
-        onClick={() => setLanguage("en")}
-        className={`px-3 py-1.5 text-xs font-medium rounded-full transition ${
-          language === "en" ? "bg-primary text-white" : "text-gray-600"
+        type="button"
+        onClick={() => setLanguage('en')}
+        className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+          language === 'en'
+            ? 'bg-white text-black'
+            : 'text-white/70 hover:text-white'
         }`}
       >
         EN
       </button>
+
       <button
-        onClick={() => setLanguage("hi")}
-        className={`px-3 py-1.5 text-xs font-medium rounded-full transition ${
-          language === "hi" ? "bg-primary text-white" : "text-gray-600"
+        type="button"
+        onClick={() => setLanguage('hi')}
+        className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+          language === 'hi'
+            ? 'bg-white text-black'
+            : 'text-white/70 hover:text-white'
         }`}
       >
-        हिं
+        HI
       </button>
     </div>
-  );
+  )
 }

@@ -5,6 +5,8 @@ type LabResult = {
   testName: string
   value: number | string
   unit?: string
+  confidence?: string
+  sourceText?: string
 }
 
 type ThresholdRule = {
@@ -21,6 +23,7 @@ type ThresholdRule = {
 function normalizeName(name: string) {
   return name
     .toLowerCase()
+    .replace(/_/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
 }
@@ -55,6 +58,7 @@ function assessValue(value: number, rule: ThresholdRule) {
     return {
       severity: 'critical_low',
       message: `${rule.test_name} is critically low.`,
+      reasoning: `${value} is at or below the critical low threshold of ${rule.critical_low}.`,
     }
   }
 
@@ -62,6 +66,7 @@ function assessValue(value: number, rule: ThresholdRule) {
     return {
       severity: 'critical_high',
       message: `${rule.test_name} is critically high.`,
+      reasoning: `${value} is at or above the critical high threshold of ${rule.critical_high}.`,
     }
   }
 
@@ -69,6 +74,7 @@ function assessValue(value: number, rule: ThresholdRule) {
     return {
       severity: 'warning_low',
       message: `${rule.test_name} is lower than expected.`,
+      reasoning: `${value} is at or below the warning low threshold of ${rule.warning_low}.`,
     }
   }
 
@@ -76,19 +82,27 @@ function assessValue(value: number, rule: ThresholdRule) {
     return {
       severity: 'warning_high',
       message: `${rule.test_name} is higher than expected.`,
+      reasoning: `${value} is at or above the warning high threshold of ${rule.warning_high}.`,
     }
   }
 
   return {
     severity: 'normal',
     message: `${rule.test_name} appears within the configured range.`,
+    reasoning: `${value} is not outside any configured warning or critical threshold.`,
   }
+}
+
+export async function GET() {
+  return NextResponse.json({
+    success: true,
+    message: 'Assess Severity API is running. Use POST to send extracted lab results.',
+  })
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-
     const results: LabResult[] = body.results || []
 
     if (!Array.isArray(results) || results.length === 0) {
@@ -109,10 +123,7 @@ export async function POST(request: Request) {
       .eq('enabled', true)
 
     if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     const assessments = results.map((result) => {
@@ -125,7 +136,10 @@ export async function POST(request: Request) {
           unit: result.unit || null,
           severity: 'unknown',
           message: 'Could not read numeric value.',
+          reasoning: 'The extracted value could not be converted into a number.',
           matchedRule: null,
+          confidence: result.confidence || null,
+          sourceText: result.sourceText || null,
         }
       }
 
@@ -138,7 +152,10 @@ export async function POST(request: Request) {
           unit: result.unit || null,
           severity: 'unknown',
           message: 'No threshold rule configured for this test.',
+          reasoning: `No matching threshold was found for "${result.testName}".`,
           matchedRule: null,
+          confidence: result.confidence || null,
+          sourceText: result.sourceText || null,
         }
       }
 
@@ -150,16 +167,23 @@ export async function POST(request: Request) {
         unit: result.unit || matchedRule.unit,
         severity: assessment.severity,
         message: assessment.message,
+        reasoning: assessment.reasoning,
         matchedRule: matchedRule.test_name,
+        confidence: result.confidence || null,
+        sourceText: result.sourceText || null,
       }
     })
 
-    const hasCritical = assessments.some((item) =>
-      item.severity === 'critical_low' || item.severity === 'critical_high'
+    const hasCritical = assessments.some(
+      (item) =>
+        item.severity === 'critical_low' ||
+        item.severity === 'critical_high'
     )
 
-    const hasWarning = assessments.some((item) =>
-      item.severity === 'warning_low' || item.severity === 'warning_high'
+    const hasWarning = assessments.some(
+      (item) =>
+        item.severity === 'warning_low' ||
+        item.severity === 'warning_high'
     )
 
     let overallSeverity = 'normal'
@@ -177,29 +201,10 @@ export async function POST(request: Request) {
     })
   } catch (err: any) {
     return NextResponse.json(
-      { error: err.message || 'Something went wrong.' },
+      {
+        error: err.message || 'Something went wrong while assessing severity.',
+      },
       { status: 500 }
     )
   }
-}
-
-export async function GET() {
-  return NextResponse.json({
-    success: true,
-    message: 'Assess Severity API is running. Use POST to send lab results.',
-    exampleRequest: {
-      results: [
-        {
-          testName: 'Hemoglobin',
-          value: '6.8',
-          unit: 'g/dL',
-        },
-        {
-          testName: 'Glucose',
-          value: '420',
-          unit: 'mg/dL',
-        },
-      ],
-    },
-  })
 }
