@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/Supabase'
 import { FileText, X, Edit2, Save, Sparkles, Search } from 'lucide-react'
+import { useLanguage } from '@/contexts/LanguageContext'
 
 type Report = {
   id: string
@@ -12,8 +13,47 @@ type Report = {
   status: string
 }
 
+const uploadText = {
+  en: {
+    uploadReport: 'Upload Report',
+    chooseFileFirst: 'Please choose a file first.',
+    mustLoginUpload: 'You must be logged in to upload.',
+    uploading: 'Uploading...',
+    upload: 'Upload',
+    fileUploadedSuccess: '✅ File uploaded and recorded successfully!',
+    fileUploadedRecordFailed: 'File uploaded, but failed to save record',
+    error: 'Error',
+    fileNameEditable: 'File name (editable before upload)',
+    uploadHistoryTimeline: 'Upload History Timeline',
+    searchPlaceholder: 'Search by name or date...',
+    loadingTimeline: 'Loading timeline...',
+    noMatchingReports: 'No matching reports found.',
+    editReportName: 'Edit Report Name',
+    summarizeReport: 'Summarize Report',
+  },
+  hi: {
+    uploadReport: 'रिपोर्ट अपलोड करें',
+    chooseFileFirst: 'कृपया पहले एक फ़ाइल चुनें।',
+    mustLoginUpload: 'अपलोड करने के लिए लॉग इन करना होगा।',
+    uploading: 'अपलोड हो रहा है...',
+    upload: 'अपलोड करें',
+    fileUploadedSuccess: '✅ फ़ाइल सफलतापूर्वक अपलोड और रिकॉर्ड हो गई!',
+    fileUploadedRecordFailed: 'फ़ाइल अपलोड हुई, लेकिन रिकॉर्ड सेव नहीं हो पाया',
+    error: 'त्रुटि',
+    fileNameEditable: 'फ़ाइल का नाम (अपलोड से पहले बदल सकते हैं)',
+    uploadHistoryTimeline: 'अपलोड हिस्ट्री टाइमलाइन',
+    searchPlaceholder: 'नाम या तारीख से खोजें...',
+    loadingTimeline: 'टाइमलाइन लोड हो रही है...',
+    noMatchingReports: 'कोई मिलती-जुलती रिपोर्ट नहीं मिली।',
+    editReportName: 'रिपोर्ट का नाम बदलें',
+    summarizeReport: 'रिपोर्ट का सारांश देखें',
+  },
+}
+
 export default function Upload() {
   const router = useRouter()
+  const { language } = useLanguage()
+  const text = uploadText[language]
 
   const [file, setFile] = useState<File | null>(null)
   const [editableName, setEditableName] = useState('')
@@ -23,10 +63,8 @@ export default function Upload() {
   const [reports, setReports] = useState<Report[]>([])
   const [loadingReports, setLoadingReports] = useState(true)
 
-  // Search query state for filtering timeline
   const [searchQuery, setSearchQuery] = useState('')
 
-  // State for inline timeline renaming
   const [editingId, setEditingId] = useState<string | null>(null)
   const [newNameVal, setNewNameVal] = useState('')
 
@@ -43,11 +81,13 @@ export default function Upload() {
       .order('uploaded_at', { ascending: false })
 
     if (!error && data) setReports(data)
+
     setLoadingReports(false)
   }
 
   function handleFileChange(selected: File | null) {
     setFile(selected)
+
     if (selected) {
       const dot = selected.name.lastIndexOf('.')
       setEditableName(dot > 0 ? selected.name.slice(0, dot) : selected.name)
@@ -56,7 +96,7 @@ export default function Upload() {
 
   async function handleUpload() {
     if (!file) {
-      setMessage('Please choose a file first.')
+      setMessage(text.chooseFileFirst)
       return
     }
 
@@ -64,10 +104,12 @@ export default function Upload() {
     setMessage('')
     setProgress(0)
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
     if (!user) {
-      setMessage('You must be logged in to upload.')
+      setMessage(text.mustLoginUpload)
       setUploading(false)
       return
     }
@@ -88,29 +130,29 @@ export default function Upload() {
 
     if (uploadError) {
       setProgress(0)
-      setMessage(`Error: ${uploadError.message}`)
+      setMessage(`${text.error}: ${uploadError.message}`)
       setUploading(false)
       return
     }
 
     setProgress(100)
 
-    const { error: dbError } = await supabase
-      .from('reports')
-      .insert({
-        user_id: user.id,
-        file_path: filePath,
-        file_name: finalName,
-        status: 'Completed'
-      })
+    const { error: dbError } = await supabase.from('reports').insert({
+      user_id: user.id,
+      file_path: filePath,
+      file_name: finalName,
+      status: 'Completed',
+    })
 
     if (dbError) {
-      setMessage(`File uploaded, but failed to save record: ${dbError.message}`)
+      setMessage(`${text.fileUploadedRecordFailed}: ${dbError.message}`)
     } else {
-      setMessage('✅ File uploaded and recorded successfully!')
+      setMessage(text.fileUploadedSuccess)
       setFile(null)
       setEditableName('')
+
       if (fileInputRef.current) fileInputRef.current.value = ''
+
       await loadReports()
     }
 
@@ -120,40 +162,50 @@ export default function Upload() {
 
   async function handleSaveRename(id: string) {
     if (!newNameVal.trim()) return
+
     const { error } = await supabase
       .from('reports')
       .update({ file_name: newNameVal.trim() })
       .eq('id', id)
 
     if (!error) {
-      setReports(reports.map(r => r.id === id ? { ...r, file_name: newNameVal.trim() } : r))
+      setReports((prev) =>
+        prev.map((r) =>
+          r.id === id ? { ...r, file_name: newNameVal.trim() } : r
+        )
+      )
       setEditingId(null)
       setNewNameVal('')
     }
   }
 
-  // Navigate to the Summarization page (sidebar) scoped to just this one report.
   function handleSummarizeClick(reportId: string) {
     router.push(`/reports?reportId=${reportId}`)
   }
 
   function formatDate(dateStr: string) {
     const d = new Date(dateStr)
+
     return {
       day: d.getDate().toString().padStart(2, '0'),
       month: d.toLocaleString('default', { month: 'short' }).toUpperCase(),
       year: d.getFullYear(),
       time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      dateStringFormatted: `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear()}`.toLowerCase()
+      dateStringFormatted: `${d.getDate()} ${d.toLocaleString('default', {
+        month: 'short',
+      })} ${d.getFullYear()}`.toLowerCase(),
     }
   }
 
-  // Filter reports based on search query matching name, month, day, or year
   const filteredReports = reports.filter((report) => {
     const d = formatDate(report.uploaded_at)
     const query = searchQuery.toLowerCase()
     const matchesName = report.file_name.toLowerCase().includes(query)
-    const matchesDate = d.dateStringFormatted.includes(query) || d.year.toString().includes(query) || d.month.toLowerCase().includes(query)
+    const matchesDate =
+      d.dateStringFormatted.includes(query) ||
+      d.year.toString().includes(query) ||
+      d.month.toLowerCase().includes(query)
+
     return matchesName || matchesDate
   })
 
@@ -163,21 +215,24 @@ export default function Upload() {
         @keyframes flowDash {
           to { stroke-dashoffset: -40; }
         }
+
         .animate-flow {
           stroke-dasharray: 8 12;
           animation: flowDash 3s linear infinite;
         }
+
         @keyframes floatSlow {
           0%, 100% { transform: translateY(0px); }
           50% { transform: translateY(-6px); }
         }
+
         .animate-float {
           animation: floatSlow 4s ease-in-out infinite;
         }
       `}</style>
 
-      {/* Colorful gradient backdrop */}
       <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-br from-fuchsia-500/20 via-orange-400/10 to-cyan-500/20" />
+
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-32 left-0 h-96 w-96 rounded-full bg-fuchsia-500/25 blur-[100px]" />
         <div className="absolute top-1/3 right-0 h-96 w-96 rounded-full bg-orange-400/20 blur-[100px]" />
@@ -186,10 +241,9 @@ export default function Upload() {
 
       <div className="relative max-w-4xl mx-auto px-6 py-10">
         <h1 className="font-heading text-2xl font-semibold text-foreground mb-6 tracking-tight">
-          Upload Report
+          {text.uploadReport}
         </h1>
 
-        {/* Glassmorphism upload card */}
         <section className="relative rounded-3xl border border-white/20 bg-card/40 backdrop-blur-xl shadow-lg p-6 mb-12 overflow-hidden">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-fuchsia-500/10 via-transparent to-cyan-500/10" />
 
@@ -205,16 +259,19 @@ export default function Upload() {
             {file && (
               <div className="rounded-xl border border-white/20 bg-background/40 p-4">
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                  File name (editable before upload)
+                  {text.fileNameEditable}
                 </label>
+
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+
                   <input
                     type="text"
                     value={editableName}
                     onChange={(e) => setEditableName(e.target.value)}
                     className="flex-1 rounded-lg border border-white/20 bg-input/30 px-3 py-2 text-sm text-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
                   />
+
                   <button
                     onClick={() => {
                       setFile(null)
@@ -237,7 +294,10 @@ export default function Upload() {
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground mt-1.5 text-right">{Math.round(progress)}%</p>
+
+                <p className="text-xs text-muted-foreground mt-1.5 text-right">
+                  {Math.round(progress)}%
+                </p>
               </div>
             )}
 
@@ -246,31 +306,30 @@ export default function Upload() {
               disabled={uploading || !file}
               className="rounded-xl bg-gradient-to-r from-fuchsia-600 via-primary to-cyan-600 text-white px-4 py-3 text-sm font-semibold transition hover:opacity-90 disabled:opacity-50"
             >
-              {uploading ? 'Uploading...' : 'Upload'}
+              {uploading ? text.uploading : text.upload}
             </button>
 
-            {message && (
-              <p className="text-xs text-muted-foreground">{message}</p>
-            )}
+            {message && <p className="text-xs text-muted-foreground">{message}</p>}
           </div>
         </section>
 
-        {/* Section Header & Search Bar */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <h2 className="font-heading text-lg font-semibold text-foreground flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" /> Upload History Timeline
+            <Sparkles className="h-5 w-5 text-primary" />
+            {text.uploadHistoryTimeline}
           </h2>
 
-          {/* Search Document Bar */}
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+
             <input
               type="text"
-              placeholder="Search by name or date..."
+              placeholder={text.searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-xl border border-white/15 bg-card/60 backdrop-blur-md pl-10 pr-4 py-2 text-xs text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground"
             />
+
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
@@ -283,12 +342,15 @@ export default function Upload() {
         </div>
 
         {loadingReports ? (
-          <p className="text-sm text-muted-foreground">Loading timeline...</p>
+          <p className="text-sm text-muted-foreground">
+            {text.loadingTimeline}
+          </p>
         ) : filteredReports.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No matching reports found.</p>
+          <p className="text-sm text-muted-foreground">
+            {text.noMatchingReports}
+          </p>
         ) : (
           <div className="relative w-full py-6">
-            {/* Background Winding SVG Path */}
             <div className="absolute inset-0 pointer-events-none flex justify-center">
               <svg
                 className="w-full h-full min-h-[600px]"
@@ -319,7 +381,6 @@ export default function Upload() {
               </svg>
             </div>
 
-            {/* Timeline Nodes Staggered Left and Right */}
             <div className="relative flex flex-col gap-24">
               {filteredReports.map((report, i) => {
                 const d = formatDate(report.uploaded_at)
@@ -329,15 +390,21 @@ export default function Upload() {
                 return (
                   <div
                     key={report.id}
-                    className={`flex items-center w-full ${isEven ? 'justify-start' : 'justify-end'}`}
+                    className={`flex items-center w-full ${
+                      isEven ? 'justify-start' : 'justify-end'
+                    }`}
                   >
                     <div className="w-[85%] sm:w-[75%] animate-float">
                       <div className="relative rounded-2xl border border-white/15 bg-card/70 backdrop-blur-md p-5 shadow-xl hover:border-primary/50 transition group">
-
-                        {/* Milestone indicator glow dot */}
-                        <div className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-primary ring-4 ring-background shadow-lg ${
-                          i === 0 && !searchQuery ? 'bg-emerald-400 animate-ping' : ''
-                        } ${isEven ? '-right-[42px] sm:-right-[54px]' : '-left-[42px] sm:-left-[54px]'}`} />
+                        <div
+                          className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-primary ring-4 ring-background shadow-lg ${
+                            i === 0 && !searchQuery ? 'bg-emerald-400 animate-ping' : ''
+                          } ${
+                            isEven
+                              ? '-right-[42px] sm:-right-[54px]'
+                              : '-left-[42px] sm:-left-[54px]'
+                          }`}
+                        />
 
                         <div className="flex flex-col gap-3">
                           <div className="flex items-center justify-between gap-4">
@@ -351,12 +418,14 @@ export default function Upload() {
                                     className="w-full rounded-lg border border-primary/50 bg-input/50 px-2.5 py-1 text-sm text-foreground outline-none"
                                     autoFocus
                                   />
+
                                   <button
                                     onClick={() => handleSaveRename(report.id)}
                                     className="p-1.5 rounded-lg bg-primary text-white hover:opacity-90"
                                   >
                                     <Save className="h-3.5 w-3.5" />
                                   </button>
+
                                   <button
                                     onClick={() => setEditingId(null)}
                                     className="p-1.5 rounded-lg bg-secondary text-secondary-foreground"
@@ -366,14 +435,17 @@ export default function Upload() {
                                 </div>
                               ) : (
                                 <div className="flex items-center gap-2 group/edit">
-                                  <p className="text-sm font-semibold text-foreground">{report.file_name}</p>
+                                  <p className="text-sm font-semibold text-foreground">
+                                    {report.file_name}
+                                  </p>
+
                                   <button
                                     onClick={() => {
                                       setEditingId(report.id)
                                       setNewNameVal(report.file_name)
                                     }}
                                     className="opacity-0 group-hover/edit:opacity-100 transition p-1 rounded hover:bg-white/10 text-muted-foreground hover:text-primary"
-                                    title="Edit Report Name"
+                                    title={text.editReportName}
                                   >
                                     <Edit2 className="h-3.5 w-3.5" />
                                   </button>
@@ -381,29 +453,36 @@ export default function Upload() {
                               )}
 
                               <p className="text-xs text-muted-foreground mt-1">
-                                {d.time} • <span className="text-emerald-400 font-medium">{report.status}</span>
+                                {d.time} •{' '}
+                                <span className="text-emerald-400 font-medium">
+                                  {report.status}
+                                </span>
                               </p>
                             </div>
 
-                            {/* Date Badge */}
                             <div className="rounded-xl border border-white/10 bg-background/50 px-3 py-1.5 text-center shrink-0">
-                              <p className="text-xs font-bold text-muted-foreground uppercase">{d.month}</p>
-                              <p className="text-lg font-extrabold text-foreground leading-none">{d.day}</p>
-                              <p className="text-[10px] text-muted-foreground">{d.year}</p>
+                              <p className="text-xs font-bold text-muted-foreground uppercase">
+                                {d.month}
+                              </p>
+                              <p className="text-lg font-extrabold text-foreground leading-none">
+                                {d.day}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {d.year}
+                              </p>
                             </div>
                           </div>
 
-                          {/* Action Button: Summarize -> goes to Summarization page, scoped to this report */}
                           <div className="pt-3 border-t border-white/10 flex items-center justify-end">
                             <button
                               onClick={() => handleSummarizeClick(report.id)}
                               className="flex items-center gap-1.5 rounded-xl bg-primary/20 hover:bg-primary/30 text-primary px-3 py-1.5 text-xs font-semibold transition border border-primary/30"
                             >
-                              <Sparkles className="h-3.5 w-3.5" /> Summarize Report
+                              <Sparkles className="h-3.5 w-3.5" />
+                              {text.summarizeReport}
                             </button>
                           </div>
                         </div>
-
                       </div>
                     </div>
                   </div>
