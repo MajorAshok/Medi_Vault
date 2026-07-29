@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../lib/Supabase'
@@ -206,9 +206,40 @@ export default function Reports() {
     const [imgIndex, setImgIndex] = useState(0)
     const imgSrc = IMG_CANDIDATES[imgIndex]
 
+    const leftTerminalRef = useRef<HTMLDivElement | null>(null)
+    const imageContainerRef = useRef<HTMLDivElement | null>(null)
+    const [overlayHeight, setOverlayHeight] = useState<number | null>(null)
+
     useEffect(() => {
         loadReports()
     }, [])
+
+    const report = reportId ? reports.find((r) => r.id === reportId) || null : null
+
+    useEffect(() => {
+        function updateOverlayHeight() {
+            if (!leftTerminalRef.current || !imageContainerRef.current) return
+
+            const leftRect = leftTerminalRef.current.getBoundingClientRect()
+            const imgRect = imageContainerRef.current.getBoundingClientRect()
+
+            setOverlayHeight(leftRect.bottom - imgRect.top)
+        }
+
+        updateOverlayHeight()
+
+        const ro = new ResizeObserver(updateOverlayHeight)
+
+        if (leftTerminalRef.current) ro.observe(leftTerminalRef.current)
+        if (imageContainerRef.current) ro.observe(imageContainerRef.current)
+
+        window.addEventListener('resize', updateOverlayHeight)
+
+        return () => {
+            ro.disconnect()
+            window.removeEventListener('resize', updateOverlayHeight)
+        }
+    }, [report?.id, answers])
 
     function handleImgError() {
         setImgIndex((i) => Math.min(i + 1, IMG_CANDIDATES.length - 1))
@@ -250,8 +281,6 @@ export default function Reports() {
 
         setLoading(false)
     }
-
-    const report = reportId ? reports.find((r) => r.id === reportId) || null : null
 
     async function handleSummarize(id: string, detail: 'short' | 'detailed') {
         setProcessingId(`${id}-${detail}`)
@@ -598,7 +627,10 @@ export default function Reports() {
                 <div className="grid min-h-0 flex-1 grid-cols-2 gap-6">
                     <div className="flex min-h-0 flex-col gap-5">
                         {/* Report Overview Box matching exact terminal style */}
-                        <div className="flex min-h-0 flex-[1.15] flex-col overflow-hidden rounded-2xl border border-white/15 bg-card/60 backdrop-blur-xl">
+                        <div
+                            ref={leftTerminalRef}
+                            className="flex min-h-0 flex-[1.15] flex-col overflow-hidden rounded-2xl border border-white/15 bg-card/60 backdrop-blur-xl"
+                        >
                             <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-2.5">
                                 <div className="flex items-center gap-1.5">
                                     <span className="h-2.5 w-2.5 rounded-full bg-red-400/70" />
@@ -630,10 +662,7 @@ export default function Reports() {
                             </div>
 
                             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 font-mono text-[13px] leading-relaxed">
-                                <p>
-                                    <span className="text-emerald-400">$</span>{' '}
-                                    <span className="text-foreground">report {report.file_name}</span>
-                                </p>
+                                <p className="text-foreground">Report: {report.file_name}</p>
 
                                 <p className="mb-4 mt-1 text-xs text-muted-foreground">
                                     loaded {formatDate(report.uploaded_at)} · {report.status.toLowerCase()}
@@ -641,10 +670,7 @@ export default function Reports() {
 
                                 {report.ai_summary ? (
                                     <>
-                                        <p>
-                                            <span className="text-emerald-400">$</span>{' '}
-                                            <span className="text-foreground">{t('summary')}</span>
-                                        </p>
+                                        <p className="font-semibold text-foreground">{t('summary')}</p>
 
                                         <div className="animate-fade-in-up">
                                             <Md text={report.ai_summary} />
@@ -654,41 +680,6 @@ export default function Reports() {
                                     <p className="italic text-muted-foreground">
                                         {t('noSummaryYet')}
                                     </p>
-                                )}
-
-                                {answers[report.id] && (
-                                    <div className="mt-4 border-t border-white/10 pt-3">
-                                        <p>
-                                            <span className="text-cyan-400">$</span>{' '}
-                                            <span className="text-foreground">ask &quot;{askedQuestion}&quot;</span>
-                                        </p>
-
-                                        <div className="animate-fade-in-up">
-                                            <Md text={answers[report.id].answer} />
-                                        </div>
-
-                                        {answers[report.id].reasoning && (
-                                            <p className="mt-2 text-xs italic text-muted-foreground">
-                                                {answers[report.id].reasoning}
-                                            </p>
-                                        )}
-
-                                        <button
-                                            onClick={() => handleExplain(report.id)}
-                                            disabled={explainingId === report.id}
-                                            className="mt-2 text-xs text-cyan-400 underline disabled:opacity-50"
-                                        >
-                                            {explainingId === report.id
-                                                ? t('explaining')
-                                                : t('explainThisAnswer')}
-                                        </button>
-
-                                        {explanations[report.id] && (
-                                            <p className="mt-2 whitespace-pre-wrap border-t border-white/10 pt-2 text-xs text-muted-foreground">
-                                                {explanations[report.id]}
-                                            </p>
-                                        )}
-                                    </div>
                                 )}
 
                                 {profileSuggestions[report.id] && (
@@ -820,13 +811,63 @@ export default function Reports() {
                             </div>
                         </div>
 
-                        <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/15">
+                        <div
+                            ref={imageContainerRef}
+                            className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/15"
+                        >
                             <img
                                 src={imgSrc}
                                 onError={handleImgError}
                                 alt=""
                                 className="h-full w-full object-cover"
                             />
+
+                            {answers[report.id] && (
+                                <div
+                                    className="absolute inset-x-0 top-0 flex flex-col overflow-hidden rounded-2xl border border-white/15 bg-card/85 backdrop-blur-xl shadow-2xl"
+                                    style={{ height: overlayHeight ? `${overlayHeight}px` : '60%' }}
+                                >
+                                    <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-2.5">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="h-2.5 w-2.5 rounded-full bg-red-400/70" />
+                                            <span className="h-2.5 w-2.5 rounded-full bg-yellow-400/70" />
+                                            <span className="h-2.5 w-2.5 rounded-full bg-green-400/70" />
+                                        </div>
+
+                                        <span className="text-xs text-muted-foreground font-mono truncate max-w-[70%]">
+                                            {askedQuestion}
+                                        </span>
+                                    </div>
+
+                                    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 font-mono text-[13px] leading-relaxed">
+                                        <div className="animate-fade-in-up">
+                                            <Md text={answers[report.id].answer} />
+                                        </div>
+
+                                        {answers[report.id].reasoning && (
+                                            <p className="mt-2 text-xs italic text-muted-foreground">
+                                                {answers[report.id].reasoning}
+                                            </p>
+                                        )}
+
+                                        <button
+                                            onClick={() => handleExplain(report.id)}
+                                            disabled={explainingId === report.id}
+                                            className="mt-2 text-xs text-cyan-400 underline disabled:opacity-50"
+                                        >
+                                            {explainingId === report.id
+                                                ? t('explaining')
+                                                : t('explainThisAnswer')}
+                                        </button>
+
+                                        {explanations[report.id] && (
+                                            <p className="mt-2 whitespace-pre-wrap border-t border-white/10 pt-2 text-xs text-muted-foreground">
+                                                {explanations[report.id]}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
