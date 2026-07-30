@@ -115,6 +115,7 @@ type TranslationKey =
   | 'loginTerms'
   | 'browserNoVideo'
   | 'errorPrefix'
+  | "suggestedProfileUpdates"
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   en: {
@@ -128,6 +129,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     uploadReport: 'Upload Report',
     output: 'Output',
     summary: 'summary',
+    suggestedProfileUpdates: "Suggested Profile Updates",
     noSummaryYet: 'no summary yet — run Quick Summary or Detailed below',
     quickSummary: 'Quick Summary',
     detailed: 'Detailed',
@@ -251,6 +253,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     summary: 'सारांश',
     noSummaryYet: 'अभी कोई सारांश नहीं है — नीचे त्वरित सारांश या विस्तृत विकल्प चलाएँ',
     quickSummary: 'त्वरित सारांश',
+    suggestedProfileUpdates: "सुझाए गए प्रोफ़ाइल अपडेट",
     detailed: 'विस्तृत',
     extractReadings: 'रीडिंग निकालें',
     addToProfile: 'प्रोफाइल में जोड़ें',
