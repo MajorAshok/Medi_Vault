@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { Suspense, useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../lib/Supabase'
@@ -174,7 +174,7 @@ function ActionCard({
     )
 }
 
-export default function Reports() {
+function ReportsContent()  {
     const router = useRouter()
     const searchParams = useSearchParams()
     const reportId = searchParams.get('reportId')
@@ -1047,5 +1047,20 @@ export default function Reports() {
                 </div>
             )}
         </main>
+    )
+}
+export default function Reports() {
+    return (
+        <Suspense
+            fallback={
+                <main className="flex h-screen items-center justify-center">
+                    <p className="text-sm text-muted-foreground">
+                        Loading reports...
+                    </p>
+                </main>
+            }
+        >
+            <ReportsContent />
+        </Suspense>
     )
 }
